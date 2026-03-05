@@ -34,36 +34,26 @@
   etc.) who have no relationship to this fork. Leaving a CODEOWNERS file with stale
   names blocks merge requests by requiring approvals from people who don't have access.
 
-### LICENSE Reflection
+### LICENSE Decision
 
-The repo inherits Apache 2.0 from the archived Defense Unicorns Zarf project. This is a
-reasonable choice with important implications:
+Apache 2.0 is retained and the copyright updated to **American Science Cloud (AmSC)**.
 
-**What Apache 2.0 allows:**
-- Anyone can use, copy, modify, and distribute this code — commercially or otherwise
-- No requirement to open-source derivative works (unlike GPL)
-- Provides an explicit patent grant — contributors cannot later sue users for patent
-  infringement on the contributed code
+Apache 2.0 is the correct choice for this project because:
+- The platform will be shared openly across institutions, national labs, and federal
+  partners working on scientific computing infrastructure
+- Apache 2.0's explicit **patent grant** protects all downstream users — if any
+  contributor later asserts patent rights over their contribution, their Apache 2.0
+  license automatically terminates, preventing patent ambush
+- Federal agencies and programs (NSF ACCESS, DOE, NIH) commonly pre-approve Apache 2.0
+  in their open-source policies, simplifying legal review for institutional adoption
+- MIT would be equally permissive but provides no patent protection — a meaningful gap
+  when multiple organisations and government contractors contribute
 
-**What it requires of users:**
-- Attribution — copies and derivative works must carry the original copyright notice
-- Changed files must be marked as modified
-
-**Is it the right choice for this repo?**
-- If this is **internal infrastructure** for a single organisation and will never be
-  publicly distributed: Apache 2.0 is harmless but unnecessary. A simple proprietary
-  copyright notice (`Copyright 2025 <Your Company>. All rights reserved.`) or no LICENSE
-  file at all (which makes it implicitly proprietary) is more honest.
-- If this is a **shared internal template** you want other teams to fork freely: Apache
-  2.0 is a good fit. It's permissive, well-understood, and the patent grant is a benefit.
-- If you want to **prevent competitors from taking the code**: Apache 2.0 is not the
-  right choice. Consider a commercial license or keep the repo private with no LICENSE.
-- MIT is a simpler alternative to Apache 2.0 with equivalent permissions but no explicit
-  patent clause — fine if patent exposure is not a concern.
-
-**Recommendation:** If the repo is and will remain private/internal, replace the LICENSE
-with a proprietary copyright header. If it may be shared or open-sourced, Apache 2.0 is
-the correct choice — just ensure the copyright line names your organisation.
+Copyright line:
+```
+Copyright 2024 Defense Unicorns (original work)
+Copyright 2025 American Science Cloud (AmSC)
+```
 
 ---
 

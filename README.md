@@ -1,6 +1,11 @@
-# AWS Multi-Account EKS Platform
+# American Science Cloud (AmSC) — AWS Multi-Account EKS Platform
 
-A Terraform-based platform for deploying portable, redeployable Kubernetes workloads across multiple AWS accounts (dev, staging, prod) using EKS, ECR, FluxCD, and GitLab CI — with no static AWS credentials anywhere.
+A Terraform-based platform developed for the **American Science Cloud (AmSC)** project,
+providing portable, redeployable Kubernetes workloads across multiple AWS accounts
+(dev, staging, prod) using EKS, ECR, FluxCD, and GitLab CI — with no static AWS
+credentials anywhere.
+
+Licensed under [Apache 2.0](LICENSE). Copyright 2025 American Science Cloud (AmSC).
 
 ---
 
