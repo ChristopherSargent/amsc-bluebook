@@ -5,12 +5,12 @@ variable "aws_region" {
 
 variable "environment" {
   type    = string
-  default = "dev"
+  default = "prod"
 }
 
 variable "cluster_name" {
   type    = string
-  default = "eks-dev"
+  default = "eks-prod"
 }
 
 variable "gitlab_url" {
@@ -38,4 +38,16 @@ variable "ecr_repositories" {
   type        = list(string)
   description = "ECR repository names to create"
   default     = []
+}
+
+variable "cluster_endpoint_public_access_cidrs" {
+  type        = list(string)
+  description = "CIDR blocks allowed to reach the EKS API. Set to your CI runner IPs and VPN range."
+  default     = ["0.0.0.0/0"]
+}
+
+variable "grafana_admin_password" {
+  type        = string
+  description = "Initial Grafana admin password. Set via TF_VAR_grafana_admin_password — never commit."
+  sensitive   = true
 }

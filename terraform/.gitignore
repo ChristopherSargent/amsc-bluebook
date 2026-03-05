@@ -1,8 +1,9 @@
 # Local state (never commit)
 *.tfstate
 *.tfstate.backup
+
+# Local plugin cache — do NOT ignore .terraform.lock.hcl, that must be committed
 .terraform/
-.terraform.lock.hcl
 
 # Plan files contain sensitive data
 *.tfplan

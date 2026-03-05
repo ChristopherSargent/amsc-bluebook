@@ -1,0 +1,32 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: loki
+      version: "6.*"
+      sourceRef:
+        kind: HelmRepository
+        name: grafana
+        namespace: flux-system
+  values:
+    # Single-binary mode — suitable for dev/staging.
+    # Switch to distributed mode for high-volume prod workloads.
+    deploymentMode: SingleBinary
+    loki:
+      auth_enabled: false
+      storage:
+        type: filesystem
+    singleBinary:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+    # Promtail ships logs from all pods to Loki
+    promtail:
+      enabled: true

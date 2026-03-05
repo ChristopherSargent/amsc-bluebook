@@ -12,3 +12,7 @@ ecr_repositories = [
 ]
 
 # gitlab_flux_token — set via TF_VAR_gitlab_flux_token env var in CI, never commit this
+
+# Restrict the EKS API endpoint to your CI runner IP range and/or VPN CIDR.
+# "0.0.0.0/0" is the insecure default — replace before deploying to real accounts.
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]

@@ -1,0 +1,29 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: external-dns
+  namespace: external-dns
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: external-dns
+      version: "1.14.*"
+      sourceRef:
+        kind: HelmRepository
+        name: external-dns
+        namespace: flux-system
+  values:
+    provider: aws
+    aws:
+      region: ${AWS_REGION}
+    serviceAccount:
+      create: true
+      name: external-dns
+      annotations:
+        eks.amazonaws.com/role-arn: ${EXTERNAL_DNS_ROLE_ARN}
+    txtOwnerId: ${CLUSTER_NAME}
+    policy: sync
+    sources:
+      - service
+      - ingress

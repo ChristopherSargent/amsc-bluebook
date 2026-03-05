@@ -10,3 +10,5 @@ ecr_repositories = [
   "myapp/backend",
   "myapp/frontend",
 ]
+
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"] # replace with CI runner / VPN CIDRs

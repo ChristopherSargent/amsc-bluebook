@@ -14,6 +14,7 @@ variables:
   #   CONFIG_REPO_PATH  (e.g. my-org/k8s-config)
   #   CONFIG_REPO_TOKEN (GitLab access token with write_repository scope)
   #   TF_VAR_gitlab_flux_token (GitLab deploy token, read_repository scope)
+  #   TF_VAR_grafana_admin_password (initial Grafana admin password)
 
 # ── OIDC auth helper ──────────────────────────────────────────────────────────
 # Exchanges the GitLab OIDC token for temporary AWS credentials via STS.

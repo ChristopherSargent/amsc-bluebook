@@ -37,15 +37,16 @@ module "vpc" {
 module "eks" {
   source = "../../modules/eks"
 
-  cluster_name       = var.cluster_name
-  cluster_version    = "1.30"
-  vpc_id             = module.vpc.vpc_id
-  subnet_ids         = module.vpc.private_subnets
-  node_instance_type = "t3.large"
-  node_min_size      = 2
-  node_max_size      = 6
-  node_desired_size  = 3
-  tags               = local.tags
+  cluster_name                         = var.cluster_name
+  cluster_version                      = "1.30"
+  vpc_id                               = module.vpc.vpc_id
+  subnet_ids                           = module.vpc.private_subnets
+  node_instance_type                   = "t3.large"
+  node_min_size                        = 2
+  node_max_size                        = 6
+  node_desired_size                    = 3
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  tags                                 = local.tags
 }
 
 module "ecr" {

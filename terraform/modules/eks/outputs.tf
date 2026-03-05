@@ -18,3 +18,8 @@ output "oidc_provider" {
   # Strip the https:// prefix — used in IAM condition keys
   value = replace(module.eks.cluster_oidc_issuer_url, "https://", "")
 }
+
+output "kms_key_arn" {
+  description = "ARN of the KMS key used for EKS secrets encryption"
+  value       = aws_kms_key.eks_secrets.arn
+}

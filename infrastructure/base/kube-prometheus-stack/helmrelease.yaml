@@ -1,0 +1,35 @@
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: kube-prometheus-stack
+  namespace: monitoring
+spec:
+  interval: 10m
+  timeout: 15m
+  chart:
+    spec:
+      chart: kube-prometheus-stack
+      version: "58.*"
+      sourceRef:
+        kind: HelmRepository
+        name: prometheus-community
+        namespace: flux-system
+  values:
+    grafana:
+      adminPassword: "${GRAFANA_ADMIN_PASSWORD}"  # set in cluster-vars or a Secret
+      ingress:
+        enabled: false  # enable and configure per-environment overlay
+      sidecar:
+        datasources:
+          enabled: true
+        dashboards:
+          enabled: true
+    prometheus:
+      prometheusSpec:
+        retention: 15d
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+    alertmanager:
+      enabled: true

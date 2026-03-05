@@ -39,6 +39,13 @@ variable "node_desired_size" {
   default = 2
 }
 
+# Bug fix: restrict public API endpoint to known CIDRs rather than 0.0.0.0/0
+variable "cluster_endpoint_public_access_cidrs" {
+  type        = list(string)
+  description = "CIDR blocks allowed to reach the public EKS API endpoint. Restrict to your CI runner IPs and VPN range."
+  default     = ["0.0.0.0/0"] # override this in every environment
+}
+
 variable "tags" {
   type    = map(string)
   default = {}
