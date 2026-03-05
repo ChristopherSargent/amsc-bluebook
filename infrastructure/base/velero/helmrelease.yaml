@@ -1,0 +1,49 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: velero
+  namespace: velero
+spec:
+  interval: 10m
+  install:
+    createNamespace: true
+  chart:
+    spec:
+      chart: velero
+      version: "7.*"
+      sourceRef:
+        kind: HelmRepository
+        name: vmware-tanzu
+        namespace: flux-system
+  values:
+    initContainers:
+      - name: velero-plugin-for-aws
+        image: velero/velero-plugin-for-aws:v1.10.0
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
+    serviceAccount:
+      server:
+        create: true
+        name: velero
+        annotations:
+          eks.amazonaws.com/role-arn: ${VELERO_ROLE_ARN}
+    configuration:
+      backupStorageLocation:
+        - name: default
+          provider: aws
+          bucket: ${VELERO_BUCKET}
+          config:
+            region: ${AWS_REGION}
+      volumeSnapshotLocation:
+        - name: default
+          provider: aws
+          config:
+            region: ${AWS_REGION}
+    schedules:
+      daily-backup:
+        schedule: "0 2 * * *"
+        template:
+          ttl: 720h  # 30 days
+          includedNamespaces:
+            - "*"

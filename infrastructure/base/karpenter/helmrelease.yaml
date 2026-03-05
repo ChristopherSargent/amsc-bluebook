@@ -1,0 +1,32 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: karpenter
+  namespace: kube-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: karpenter
+      version: "1.0.*"
+      sourceRef:
+        # Karpenter 1.0+ is published to an OCI registry, not eks-charts.
+        kind: HelmRepository
+        name: karpenter
+        namespace: flux-system
+  values:
+    serviceAccount:
+      create: true
+      name: karpenter
+      annotations:
+        eks.amazonaws.com/role-arn: ${KARPENTER_ROLE_ARN}
+    settings:
+      clusterName: ${CLUSTER_NAME}
+      interruptionQueue: ${KARPENTER_QUEUE_NAME}
+    controller:
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi

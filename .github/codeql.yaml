@@ -1,6 +1,0 @@
-paths-ignore:
-  - build/**
-
-query-filters:
-  - exclude:
-      id: go/path-injection
