@@ -10,9 +10,12 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  # Flux substitutes ${VAR} references in all resources using values from this ConfigMap.
-  # The ConfigMap is written by Terraform after IAM roles are created — no manual ARN copying.
+  # Flux substitutes ${VAR} references in all resources using values from these sources.
+  # cluster-vars (ConfigMap) holds non-sensitive ARNs written by Terraform.
+  # cluster-secrets (Secret) holds sensitive values (passwords) — never in a ConfigMap.
   postBuild:
     substituteFrom:
       - kind: ConfigMap
         name: cluster-vars
+      - kind: Secret
+        name: cluster-secrets

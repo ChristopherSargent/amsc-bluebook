@@ -1,4 +1,4 @@
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: kube-prometheus-stack
@@ -6,6 +6,8 @@ metadata:
 spec:
   interval: 10m
   timeout: 15m
+  install:
+    createNamespace: true
   chart:
     spec:
       chart: kube-prometheus-stack
@@ -16,7 +18,8 @@ spec:
         namespace: flux-system
   values:
     grafana:
-      adminPassword: "${GRAFANA_ADMIN_PASSWORD}"  # set in cluster-vars or a Secret
+      # Comes from cluster-secrets Secret via Flux substituteFrom — not the ConfigMap.
+      adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
       ingress:
         enabled: false  # enable and configure per-environment overlay
       sidecar:

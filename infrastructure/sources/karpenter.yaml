@@ -1,0 +1,10 @@
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: HelmRepository
+metadata:
+  name: karpenter
+  namespace: flux-system
+spec:
+  # Karpenter 1.0+ moved from eks-charts to the OCI registry.
+  type: oci
+  interval: 12h
+  url: oci://public.ecr.aws/karpenter

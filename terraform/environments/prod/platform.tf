@@ -295,7 +295,25 @@ resource "kubernetes_config_map" "cluster_vars" {
     EXTERNAL_DNS_ROLE_ARN     = module.external_dns_irsa.role_arn
     VELERO_ROLE_ARN           = module.velero_irsa.role_arn
     VELERO_BUCKET             = aws_s3_bucket.velero.bucket
-    GRAFANA_ADMIN_PASSWORD    = var.grafana_admin_password
+  }
+
+  depends_on = [flux_bootstrap_git.this]
+}
+
+# ── cluster-secrets Secret ────────────────────────────────────────────────────
+# Sensitive values are kept in a Secret (encrypted at rest via KMS) so they
+# are never visible in the plaintext cluster-vars ConfigMap.
+# Flux substituteFrom reads both — HelmReleases use ${GRAFANA_ADMIN_PASSWORD}
+# as normal but the value comes from this Secret, not the ConfigMap.
+
+resource "kubernetes_secret" "cluster_secrets" {
+  metadata {
+    name      = "cluster-secrets"
+    namespace = "flux-system"
+  }
+
+  data = {
+    GRAFANA_ADMIN_PASSWORD = var.grafana_admin_password
   }
 
   depends_on = [flux_bootstrap_git.this]

@@ -1,4 +1,4 @@
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: karpenter
@@ -10,8 +10,9 @@ spec:
       chart: karpenter
       version: "1.0.*"
       sourceRef:
+        # Karpenter 1.0+ is published to an OCI registry, not eks-charts.
         kind: HelmRepository
-        name: eks-charts
+        name: karpenter
         namespace: flux-system
   values:
     serviceAccount:

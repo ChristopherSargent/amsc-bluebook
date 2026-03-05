@@ -1,11 +1,16 @@
-node_modules
-dist
+# Dependency directories
+node_modules/
+
+# Build outputs
+dist/
+build/
+coverage/
+binaries/
+
+# Conversation artifacts
+Version1.md
+
+# Secrets and local overrides — never commit
+*.auto.tfvars
+*.tfvars.local
 insecure*
-coverage
-build
-Pulumi.**.y*ml
-binaries
-eks.yaml
-**.tar.zst
-zarf-config.y*ml
-zarf-sbom

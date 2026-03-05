@@ -7,3 +7,5 @@ resources:
   - grafana.yaml
   - external-dns.yaml
   - vmware-tanzu.yaml
+  - karpenter.yaml
+  - metrics-server.yaml
