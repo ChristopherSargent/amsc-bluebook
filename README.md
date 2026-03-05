@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 <p align="center">
   <a href="https://american-science-cloud.github.io/amsc-site/">
     <img src="docs/amsc_logo.svg" alt="American Science Cloud" width="340">
@@ -50,49 +49,6 @@ Per AWS Account:
   ├── external-secrets    ECR token refresh via IRSA
   └── <your-app-ns>       Application workloads
 
-=======
-# amsc-bluebook
-
-The reference implementation for deploying portable, redeployable Kubernetes
-infrastructure across multiple AWS accounts for the **American Science Cloud (AmSC)**
-project. Built on EKS, ECR, FluxCD, and GitLab CI — with no static AWS credentials
-anywhere.
-
-Licensed under [Apache 2.0](LICENSE). Copyright 2025 American Science Cloud (AmSC).
-
----
-
-## Architecture
-
-```
-GitLab CI (OIDC)
-  |
-  |-- terraform apply --> EKS + ECR + IAM (per account)
-  |-- docker push     --> ECR (per account)
-  |-- git push        --> config repo (values bump)
-                              |
-                        FluxCD (in-cluster, per env)
-                              |-- pulls config repo
-                              |-- applies HelmReleases
-                              |-- reconciles drift
-
-Per AWS Account:
-  EKS Cluster
-  ├── kube-system         Cilium (eBPF networking + Hubble observability)
-  ├── kube-system         AWS Load Balancer Controller (ALB/NLB provisioning)
-  ├── kube-system         Karpenter (node autoscaling)
-  ├── kube-system         Metrics Server (HPA support)
-  ├── kong                Kong Gateway OSS (API gateway, L7 routing, rate limiting)
-  ├── cert-manager        cert-manager (TLS via Let's Encrypt DNS-01)
-  ├── external-dns        External DNS (Route53 automation)
-  ├── monitoring          kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
-  ├── monitoring          Loki + Promtail (log aggregation)
-  ├── velero              Velero (cluster backup to S3)
-  ├── flux-system         FluxCD controllers
-  ├── external-secrets    ECR token refresh via IRSA
-  └── <your-app-ns>       Application workloads
-
->>>>>>> 732895ee2a1b31342f5f83e8005c417eac510635
   ECR Registry
   └── per-app repositories (created by Terraform)
 ```
