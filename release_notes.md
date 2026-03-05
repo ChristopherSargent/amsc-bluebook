@@ -1,4 +1,4 @@
-# Release Notes
+# amsc-bluebook — Release Notes
 
 ---
 

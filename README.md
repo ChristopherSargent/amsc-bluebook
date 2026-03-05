@@ -1,9 +1,9 @@
-# American Science Cloud (AmSC) — AWS Multi-Account EKS Platform
+# amsc-bluebook
 
-A Terraform-based platform developed for the **American Science Cloud (AmSC)** project,
-providing portable, redeployable Kubernetes workloads across multiple AWS accounts
-(dev, staging, prod) using EKS, ECR, FluxCD, and GitLab CI — with no static AWS
-credentials anywhere.
+The reference implementation for deploying portable, redeployable Kubernetes
+infrastructure across multiple AWS accounts for the **American Science Cloud (AmSC)**
+project. Built on EKS, ECR, FluxCD, and GitLab CI — with no static AWS credentials
+anywhere.
 
 Licensed under [Apache 2.0](LICENSE). Copyright 2025 American Science Cloud (AmSC).
 
