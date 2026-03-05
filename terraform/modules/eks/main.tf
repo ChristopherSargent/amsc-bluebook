@@ -18,7 +18,11 @@ module "eks" {
   cluster_name    = var.cluster_name
   cluster_version = var.cluster_version
 
-  # Bug fix: restrict endpoint to known CIDRs, not 0.0.0.0/0
+  # Private access lets nodes and in-VPC callers reach the API without going
+  # through the public endpoint. Public access is also enabled so CI runners
+  # outside the VPC can reach the cluster — restrict the CIDRs to your runner
+  # IPs and VPN range via cluster_endpoint_public_access_cidrs.
+  cluster_endpoint_private_access      = true
   cluster_endpoint_public_access       = true
   cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 

@@ -51,3 +51,8 @@ variable "grafana_admin_password" {
   description = "Initial Grafana admin password. Set via TF_VAR_grafana_admin_password — never commit."
   sensitive   = true
 }
+
+variable "letsencrypt_email" {
+  type        = string
+  description = "Email address for Let's Encrypt certificate notifications and expiry warnings."
+}

@@ -91,6 +91,8 @@ tf:apply:dev:
     - terraform apply plan.tfplan
   needs:
     - tf:plan:dev
+  environment:
+    name: dev
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -204,6 +206,10 @@ deploy:dev:
   extends: .deploy
   variables:
     DEPLOY_ENV: dev
+  needs:
+    - build
+  environment:
+    name: dev
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
@@ -211,6 +217,8 @@ deploy:staging:
   extends: .deploy
   variables:
     DEPLOY_ENV: staging
+  needs:
+    - build
   environment:
     name: staging
   rules:
@@ -221,6 +229,8 @@ deploy:prod:
   extends: .deploy
   variables:
     DEPLOY_ENV: prod
+  needs:
+    - build
   environment:
     name: production
   rules:

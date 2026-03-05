@@ -1,3 +1,11 @@
+resource "aws_kms_key" "ecr" {
+  count                   = length(var.repositories) > 0 ? 1 : 0
+  description             = "ECR image encryption key"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags                    = var.tags
+}
+
 resource "aws_ecr_repository" "this" {
   for_each = toset(var.repositories)
 
@@ -10,6 +18,7 @@ resource "aws_ecr_repository" "this" {
 
   encryption_configuration {
     encryption_type = "KMS"
+    kms_key         = aws_kms_key.ecr[0].arn
   }
 
   tags = var.tags

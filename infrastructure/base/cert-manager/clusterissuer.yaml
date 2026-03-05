@@ -1,12 +1,12 @@
 # Provisions public TLS certs via Let's Encrypt DNS-01 challenge against Route53.
-# Replace the email address before deploying.
+# Set LETSENCRYPT_EMAIL in cluster-vars ConfigMap or pass via terraform.tfvars.
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
   name: letsencrypt-prod
 spec:
   acme:
-    email: platform@example.com  # update me
+    email: ${LETSENCRYPT_EMAIL}
     server: https://acme-v02.api.letsencrypt.org/directory
     privateKeySecretRef:
       name: letsencrypt-prod-account-key

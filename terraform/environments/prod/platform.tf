@@ -295,6 +295,7 @@ resource "kubernetes_config_map" "cluster_vars" {
     EXTERNAL_DNS_ROLE_ARN     = module.external_dns_irsa.role_arn
     VELERO_ROLE_ARN           = module.velero_irsa.role_arn
     VELERO_BUCKET             = aws_s3_bucket.velero.bucket
+    LETSENCRYPT_EMAIL         = var.letsencrypt_email
   }
 
   depends_on = [flux_bootstrap_git.this]

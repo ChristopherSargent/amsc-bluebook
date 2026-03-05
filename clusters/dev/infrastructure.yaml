@@ -10,12 +10,13 @@ spec:
   sourceRef:
     kind: GitRepository
     name: flux-system
-  # Flux substitutes ${VAR} references in all resources using values from these sources.
   # cluster-vars (ConfigMap) holds non-sensitive ARNs written by Terraform.
-  # cluster-secrets (Secret) holds sensitive values (passwords) — never in a ConfigMap.
+  # cluster-secrets (Secret) holds sensitive values — marked optional so Flux
+  # retries gracefully if Terraform hasn't finished writing it yet on first run.
   postBuild:
     substituteFrom:
       - kind: ConfigMap
         name: cluster-vars
       - kind: Secret
         name: cluster-secrets
+        optional: true

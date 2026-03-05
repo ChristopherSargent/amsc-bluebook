@@ -8,7 +8,12 @@
 # Plan files contain sensitive data
 *.tfplan
 
-# Var files with secrets
+# Auto-loaded var files (*.auto.tfvars are picked up by terraform automatically)
+# and explicitly named secret files — never commit these.
+# terraform.tfvars is intentionally NOT ignored: it holds non-sensitive values
+# (gitlab_url, repo paths, ecr_repositories). Sensitive values must be passed
+# via TF_VAR_* environment variables, never written to any tfvars file.
 *.auto.tfvars
+*.secrets.tfvars
 override.tf
 override.tf.json

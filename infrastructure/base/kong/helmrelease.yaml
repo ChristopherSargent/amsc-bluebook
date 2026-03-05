@@ -19,38 +19,41 @@ spec:
         name: kong
         namespace: flux-system
   values:
+    # CRDs must be installed by the chart — no separate mechanism exists here.
+    ingressController:
+      enabled: true
+      installCRDs: true
+
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          memory: 256Mi
+
     gateway:
-      # Kong proxy sits behind the AWS Load Balancer Controller ALB.
-      # ALB terminates TLS and forwards to Kong; Kong handles L7 routing,
-      # rate limiting, authentication, and plugin execution.
+      # Kong proxy sits behind an AWS Network Load Balancer.
+      # Kong handles L7 routing, rate limiting, auth plugins, and request transforms.
       replicaCount: 2
 
       resources:
         requests:
           cpu: 200m
           memory: 256Mi
+        limits:
+          memory: 512Mi
 
       # Kong admin API — kept ClusterIP (not exposed externally).
       admin:
         enabled: true
-        type: ClusterIP
+        service:
+          type: ClusterIP
 
-      # Proxy service — AWS LBC creates an ALB in front of this NLB.
+      # Proxy service — AWS LBC provisions an NLB in front of this service.
       proxy:
-        type: LoadBalancer
-        annotations:
-          # Provision a Network Load Balancer for Kong's proxy port.
-          # Kong then handles all L7 routing inward from there.
-          service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-          service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-
-    # Kong Ingress Controller settings
-    controller:
-      ingressController:
         enabled: true
-        installCRDs: false  # Flux applies CRDs via the HelmRelease
-
-      resources:
-        requests:
-          cpu: 100m
-          memory: 128Mi
+        service:
+          type: LoadBalancer
+          annotations:
+            service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+            service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
