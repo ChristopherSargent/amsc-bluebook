@@ -48,6 +48,83 @@
 
 ---
 
+## cl4.002 — Production review: error fixes, security hardening, quality improvements
+
+### Errors Fixed
+
+- **`amiFamily: AL2` → `AL2023`** (`infrastructure/base/karpenter/ec2nodeclass.yaml`)
+  Amazon Linux 2 reached end-of-life June 2025. Karpenter would fail to launch nodes
+  because the AL2 EKS-optimized AMI is no longer published. Changed to `AL2023`.
+
+- **Kong CRDs never installed** (`infrastructure/base/kong/helmrelease.yaml`)
+  `installCRDs: false` was set with no separate mechanism to apply them. The Kong
+  Ingress Controller would crash immediately because `KongRoute`, `KongService`, and
+  `KongPlugin` CRDs were missing. Changed to `installCRDs: true`.
+
+- **Kong Helm value key paths wrong** (`infrastructure/base/kong/helmrelease.yaml`)
+  The values structure did not match the `kong/ingress` chart schema:
+  - `controller.ingressController` → top-level `ingressController`
+  - `gateway.admin.type` → `gateway.admin.service.type`
+  - `gateway.proxy.type` / `gateway.proxy.annotations` → `gateway.proxy.service.type` / `gateway.proxy.service.annotations`
+  The gateway would have deployed with wrong service types and no NLB.
+
+### Security
+
+- **EKS private endpoint enabled** (`terraform/modules/eks/main.tf`)
+  `cluster_endpoint_private_access: true` added alongside the existing public endpoint.
+  Nodes and in-VPC callers (including Flux and Karpenter) now reach the API server
+  without traversing the public internet. The public endpoint remains for CI runners
+  outside the VPC, restricted by `cluster_endpoint_public_access_cidrs`.
+
+- **ECR customer-managed KMS key** (`terraform/modules/ecr/main.tf`)
+  `encryption_type = "KMS"` previously used the AWS-managed ECR key, which cannot be
+  rotated on a custom schedule or audited independently. ECR repositories now use a
+  dedicated CMK with automatic key rotation, consistent with the EKS secrets KMS key.
+
+- **`terraform/.gitignore` secret file conventions clarified**
+  Documented that `terraform.tfvars` is intentionally not ignored (non-sensitive config
+  only). Added `*.secrets.tfvars` as the convention for files containing sensitive
+  values. All sensitive inputs must be passed via `TF_VAR_*` environment variables.
+
+### Production Quality
+
+- **cert-manager email no longer hardcoded** (`infrastructure/base/cert-manager/clusterissuer.yaml`)
+  `platform@example.com` was a placeholder that would silently prevent Let's Encrypt
+  from sending expiry warnings. Replaced with `${LETSENCRYPT_EMAIL}` substitution
+  variable. Added `letsencrypt_email` input variable to all three environments and
+  wired it into the `cluster-vars` ConfigMap.
+
+- **GitLab CI: `tf:apply:dev` now has an `environment:` block**
+  Staging and prod apply jobs had `environment:` blocks; dev did not. Without it,
+  GitLab does not track dev as a deployment environment, cannot display environment
+  status, and deployment protection rules cannot be applied.
+
+- **GitLab CI: deploy jobs now declare `needs: [build]`**
+  Without explicit `needs:`, deploy jobs would block until every job in all prior
+  stages completed — including unrelated manual `tf:plan:staging` and `tf:plan:prod`
+  jobs. The three deploy jobs now run as soon as the image build completes.
+
+- **`cluster-secrets` marked `optional: true` in all Flux Kustomizations**
+  (`clusters/dev/infrastructure.yaml`, `clusters/staging/`, `clusters/prod/`)
+  If Flux reconciles during the first `terraform apply` before `kubernetes_secret`
+  has been written, it would hard-fail. With `optional: true` it retries on the
+  next interval instead.
+
+- **Memory limits added to all HelmReleases**
+  Components with only `requests` set (Karpenter controller, Prometheus, Loki) now
+  also have `limits`. Without limits, a memory leak or traffic spike can exhaust node
+  memory and trigger pod evictions across the node.
+
+- **Velero AWS plugin bumped** (`infrastructure/base/velero/helmrelease.yaml`)
+  `velero/velero-plugin-for-aws:v1.9.0` → `v1.10.0` to pick up upstream bug fixes.
+
+- **`outputs.tf` improved across all three environments**
+  Added `ecr_registry` (the hostname needed for `DEV/STAGING/PROD_ECR_REGISTRY`
+  GitLab variables) and `kms_key_arn` outputs. `terraform output` now returns
+  everything the README setup guide asks for without manual calculation.
+
+---
+
 ## cl4.001 — Security hardening, bug fixes, and production quality pass
 
 ### Security
