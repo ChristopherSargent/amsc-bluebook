@@ -1,0 +1,50 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: cilium
+  namespace: kube-system
+spec:
+  interval: 10m
+  chart:
+    spec:
+      chart: cilium
+      version: "1.15.*"
+      sourceRef:
+        kind: HelmRepository
+        name: cilium
+        namespace: flux-system
+  values:
+    # CNI chaining mode: Cilium runs alongside the AWS VPC CNI.
+    # VPC CNI handles IP allocation; Cilium handles network policy enforcement
+    # and observability via eBPF — no disruption to existing pod networking.
+    # To fully replace the VPC CNI (ENI mode), set cni.chainingMode: none,
+    # ipam.mode: eni, and remove the aws-node DaemonSet before applying.
+    cni:
+      chainingMode: aws-cni
+      exclusive: false
+
+    ipam:
+      mode: kubernetes
+
+    # Required when chaining with VPC CNI — disables Cilium's tunnel
+    # and lets VPC CNI handle the underlay routing.
+    routingMode: native
+    endpointRoutes:
+      enabled: true
+
+    # Hubble: real-time eBPF-based network observability.
+    # The UI provides a service dependency map and per-flow visibility.
+    hubble:
+      enabled: true
+      relay:
+        enabled: true
+      ui:
+        enabled: true
+        ingress:
+          enabled: false  # enable per-environment overlay with Kong or ALB
+
+    # Resource limits — tune per environment via overlay patches.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi

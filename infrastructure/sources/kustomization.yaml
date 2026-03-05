@@ -9,3 +9,5 @@ resources:
   - vmware-tanzu.yaml
   - karpenter.yaml
   - metrics-server.yaml
+  - cilium.yaml
+  - kong.yaml

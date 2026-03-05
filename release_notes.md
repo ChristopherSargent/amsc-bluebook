@@ -2,6 +2,52 @@
 
 ---
 
+## cl4.002 — Add Cilium (eBPF networking) and Kong Gateway OSS
+
+### New Components
+
+- **Cilium** (`infrastructure/base/cilium/`)
+  Cilium is added in CNI chaining mode alongside the AWS VPC CNI. VPC CNI continues
+  to handle IP address allocation (each pod gets a real VPC IP); Cilium layers eBPF
+  on top to provide kernel-level network policy enforcement and Hubble observability.
+  No sidecar proxies are required.
+
+  Key configuration:
+  - `cni.chainingMode: aws-cni` — works alongside VPC CNI, no disruption to existing networking
+  - `ipam.mode: kubernetes` — delegates IP management to Kubernetes/VPC CNI
+  - `hubble.relay.enabled: true` + `hubble.ui.enabled: true` — real-time service
+    dependency map and per-flow traffic visibility via the Hubble UI
+  - To fully replace the VPC CNI with Cilium ENI mode, set `cni.chainingMode: none`
+    and `ipam.mode: eni` and remove the `aws-node` DaemonSet
+
+  Source: `infrastructure/sources/cilium.yaml` (`https://helm.cilium.io/`)
+
+- **Kong Gateway OSS** (`infrastructure/base/kong/`)
+  Kong Ingress Controller (KIC) is added as an API gateway in front of application
+  services. Kong handles L7 concerns (rate limiting, authentication, request routing)
+  that the AWS Load Balancer Controller does not provide natively.
+
+  Key configuration:
+  - `gateway.proxy.type: LoadBalancer` with NLB annotations — AWS LBC provisions an
+    NLB in front of Kong's proxy port
+  - `gateway.admin.type: ClusterIP` — admin API is not exposed externally
+  - `gateway.replicaCount: 2` — HA for the proxy
+  - Kong is fully open source (Apache 2.0); the management GUI requires Kong Enterprise
+  - Routes and plugins are managed via `KongRoute`, `KongService`, and `KongPlugin` CRDs
+
+  Source: `infrastructure/sources/kong.yaml` (`https://charts.konghq.com`)
+
+### Updated Files
+
+- `infrastructure/sources/kustomization.yaml` — added `cilium.yaml` and `kong.yaml`
+- `infrastructure/dev/kustomization.yaml` — added `../base/cilium` and `../base/kong`
+- `infrastructure/staging/kustomization.yaml` — same
+- `infrastructure/prod/kustomization.yaml` — same
+- `README.md` — updated architecture diagram, added platform components table,
+  added Cilium + Kong networking section, fixed example HelmRelease to use `v2` API
+
+---
+
 ## cl4.001 — Security hardening, bug fixes, and production quality pass
 
 ### Security

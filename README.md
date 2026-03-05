@@ -20,6 +20,16 @@ GitLab CI (OIDC)
 
 Per AWS Account:
   EKS Cluster
+  ├── kube-system         Cilium (eBPF networking + Hubble observability)
+  ├── kube-system         AWS Load Balancer Controller (ALB/NLB provisioning)
+  ├── kube-system         Karpenter (node autoscaling)
+  ├── kube-system         Metrics Server (HPA support)
+  ├── kong                Kong Gateway OSS (API gateway, L7 routing, rate limiting)
+  ├── cert-manager        cert-manager (TLS via Let's Encrypt DNS-01)
+  ├── external-dns        External DNS (Route53 automation)
+  ├── monitoring          kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
+  ├── monitoring          Loki + Promtail (log aggregation)
+  ├── velero              Velero (cluster backup to S3)
   ├── flux-system         FluxCD controllers
   ├── external-secrets    ECR token refresh via IRSA
   └── <your-app-ns>       Application workloads
@@ -33,6 +43,26 @@ Per AWS Account:
 - GitLab CI authenticates to AWS via OIDC — no access keys, no secrets rotation
 - FluxCD runs inside each cluster and pulls from Git — no inbound cluster access required
 - External Secrets Operator refreshes ECR auth tokens automatically via IRSA
+- Cilium enforces network policy at the kernel level via eBPF — no sidecar proxies required
+- Kong provides API gateway capabilities (rate limiting, auth plugins, L7 routing) in front of services
+
+---
+
+## Platform Components
+
+| Component | Namespace | Purpose | IAM Required |
+|---|---|---|---|
+| Cilium | `kube-system` | eBPF networking, network policy, Hubble observability | No |
+| AWS Load Balancer Controller | `kube-system` | Provisions ALBs/NLBs from Ingress resources | Yes (IRSA) |
+| Karpenter | `kube-system` | Node autoscaling with spot interruption handling | Yes (IRSA) |
+| Metrics Server | `kube-system` | Provides CPU/memory metrics for HPA | No |
+| Kong Gateway OSS | `kong` | API gateway: L7 routing, rate limiting, auth plugins | No |
+| cert-manager | `cert-manager` | Automatic TLS certificates via Let's Encrypt DNS-01 | Yes (IRSA) |
+| External DNS | `external-dns` | Syncs Route53 records from Kubernetes Services/Ingresses | Yes (IRSA) |
+| kube-prometheus-stack | `monitoring` | Prometheus, Grafana, Alertmanager | No |
+| Loki + Promtail | `monitoring` | Log aggregation and shipping | No |
+| Velero | `velero` | Cluster backup and restore to S3 | Yes (IRSA) |
+| External Secrets Operator | `external-secrets` | ECR token refresh | Yes (IRSA) |
 
 ---
 
@@ -45,15 +75,30 @@ Per AWS Account:
 │   ├── bootstrap/
 │   │   └── main.tf                 Creates S3 state bucket + DynamoDB lock table
 │   ├── modules/
-│   │   ├── eks/                    EKS cluster + OIDC provider
+│   │   ├── eks/                    EKS cluster + KMS secrets encryption
 │   │   ├── ecr/                    ECR repositories with lifecycle policies
 │   │   └── irsa/                   IAM role for Kubernetes service accounts
 │   └── environments/
-│       ├── dev/                    Dev account config
-│       ├── staging/                Staging account config
-│       └── prod/                   Prod account config
-└── adr/
-    └── template.md                 Architecture decision record template
+│       ├── dev/                    Dev account: main.tf, platform.tf, providers.tf
+│       ├── staging/                Staging account: same structure, larger nodes, HA NAT
+│       └── prod/                   Prod account: same structure, tag-only deploys
+├── clusters/
+│   ├── dev/infrastructure.yaml     Flux Kustomization — points at infrastructure/dev
+│   ├── staging/infrastructure.yaml
+│   └── prod/infrastructure.yaml
+└── infrastructure/
+    ├── sources/                    HelmRepository sources (one file per upstream)
+    └── base/                       HelmRelease base configs (10 components)
+        ├── cilium/
+        ├── aws-load-balancer-controller/
+        ├── kong/
+        ├── karpenter/
+        ├── metrics-server/
+        ├── cert-manager/
+        ├── external-dns/
+        ├── kube-prometheus-stack/
+        ├── loki/
+        └── velero/
 ```
 
 Each environment directory contains:
@@ -65,7 +110,7 @@ Each environment directory contains:
 | `variables.tf` | Input variable declarations |
 | `terraform.tfvars` | Environment-specific values |
 | `main.tf` | Module calls: VPC, EKS, ECR, IAM, ESO, Flux |
-| `outputs.tf` | Role ARNs and registry URLs to copy into GitLab CI variables |
+| `platform.tf` | IRSA roles + Velero S3 bucket + cluster-vars ConfigMap + cluster-secrets Secret |
 
 ---
 
@@ -136,10 +181,11 @@ gitlab_project_path = "my-org/my-app"        # the app source repo
 ecr_repositories    = ["myapp/backend", "myapp/frontend"]
 ```
 
-**3. Set the Flux deploy token** as an environment variable (never commit this):
+**3. Set sensitive variables** as environment variables (never commit these):
 
 ```bash
 export TF_VAR_gitlab_flux_token="<gitlab-deploy-token-with-read_repository-scope>"
+export TF_VAR_grafana_admin_password="<initial-grafana-password>"
 ```
 
 Create the deploy token in GitLab under your config repo: **Settings > Repository > Deploy tokens**.
@@ -158,13 +204,15 @@ terraform apply
 
 This creates:
 - VPC with public/private subnets across 3 AZs
-- EKS cluster (K8s 1.30) with a managed node group
+- EKS cluster (K8s 1.30) with a managed node group and KMS secrets encryption
 - ECR repositories for each app
 - GitLab OIDC provider in IAM
 - `ci-deploy` IAM role trusted by your GitLab CI pipeline
-- IRSA role for External Secrets Operator
+- IRSA roles for all platform components (ALB Controller, Karpenter, cert-manager, External DNS, Velero, ESO)
+- Velero S3 bucket (KMS encrypted, versioned, no public access)
 - External Secrets Operator (via Helm)
 - Flux bootstrap (installs Flux into the cluster and commits its manifests to your config repo)
+- `cluster-vars` ConfigMap and `cluster-secrets` Secret in `flux-system` (consumed by all HelmReleases)
 
 Repeat for staging and prod.
 
@@ -218,7 +266,7 @@ spec:
   interval: 5m
   url: oci://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/charts
 ---
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
+apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: myapp
@@ -302,8 +350,9 @@ Creates an EKS cluster using `terraform-aws-modules/eks` v20.
 | `node_min_size` | `1` | Min node count |
 | `node_max_size` | `3` | Max node count |
 | `node_desired_size` | `2` | Desired node count |
+| `cluster_endpoint_public_access_cidrs` | `["0.0.0.0/0"]` | CIDRs allowed to reach the API server |
 
-Key outputs: `cluster_name`, `cluster_endpoint`, `oidc_provider_arn`, `oidc_provider`
+Key outputs: `cluster_name`, `cluster_endpoint`, `oidc_provider_arn`, `oidc_provider`, `kms_key_arn`
 
 ### `modules/ecr`
 
@@ -359,6 +408,41 @@ The `.gitlab-ci.yml` pipeline has five stages:
 | `CONFIG_REPO_PATH` | GitLab path to Flux config repo | No |
 | `CONFIG_REPO_TOKEN` | GitLab token with `write_repository` on config repo | Yes (mask) |
 | `TF_VAR_gitlab_flux_token` | GitLab deploy token for Flux (read-only) | Yes (mask) |
+| `TF_VAR_grafana_admin_password` | Initial Grafana admin password | Yes (mask) |
+
+---
+
+## Networking: Cilium + Kong
+
+### Cilium
+
+Cilium runs in **CNI chaining mode** alongside the AWS VPC CNI. VPC CNI handles IP address allocation (each pod gets a VPC IP); Cilium adds eBPF-based network policy enforcement and Hubble observability on top.
+
+**What this gives you:**
+- `NetworkPolicy` and `CiliumNetworkPolicy` resources enforced at the kernel level — no iptables chains
+- Hubble UI: a real-time service dependency map and per-connection flow log
+- L7-aware policy (filter by HTTP method, path, gRPC service) without sidecars
+
+**To fully replace VPC CNI (ENI mode):** set `cni.chainingMode: none`, `ipam.mode: eni`, and remove the `aws-node` DaemonSet from the cluster before applying. This reduces per-pod IP overhead and is recommended for large node counts.
+
+### Kong Gateway OSS
+
+Kong sits in front of your application services and handles cross-cutting API concerns:
+
+- **Rate limiting** — per-consumer or per-IP, configured via `KongPlugin` CRD
+- **Authentication** — JWT validation, API key, OAuth2, OIDC — without touching app code
+- **Request routing** — path-based, header-based, host-based via `KongRoute` CRD
+- **Observability** — per-route request metrics and logs
+
+**Traffic flow:**
+```
+Internet → AWS NLB → Kong proxy (kong namespace)
+                        |-- routes to Services via KongRoute
+                        |-- applies plugins (rate limit, auth, etc.)
+                        └── Service → Pod
+```
+
+Kong is fully open source (Apache 2.0). The management GUI (Kong Manager) and some enterprise plugins require a paid Kong Enterprise license, but all routing and plugin capabilities used here are in the OSS version.
 
 ---
 
@@ -366,7 +450,8 @@ The `.gitlab-ci.yml` pipeline has five stages:
 
 1. Add the repository names to `ecr_repositories` in each environment's `terraform.tfvars` and re-apply Terraform.
 2. Add a `HelmRelease` manifest under `clusters/<env>/apps/` in the config repo.
-3. Add a `build` job and a `deploy:<env>` job to `.gitlab-ci.yml` for the new app.
+3. Add a `KongRoute` and `KongService` manifest to expose the app through the Kong gateway.
+4. Add a `build` job and a `deploy:<env>` job to `.gitlab-ci.yml` for the new app.
 
 ---
 
