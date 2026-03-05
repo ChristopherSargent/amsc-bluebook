@@ -15,4 +15,6 @@ ecr_repositories = [
 
 # Restrict the EKS API endpoint to your CI runner IP range and/or VPN CIDR.
 # "0.0.0.0/0" is the insecure default — replace before deploying to real accounts.
-cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"]
+cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"] # replace with CI runner / VPN CIDRs
+
+letsencrypt_email = "platform@example.com" # update me — used for Let's Encrypt cert expiry notifications

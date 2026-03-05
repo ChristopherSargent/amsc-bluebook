@@ -2,6 +2,71 @@
 
 ---
 
+## cl4.002 — Third review pass: deprecations, missing values, housekeeping, LICENSE
+
+### Errors Fixed
+
+- **`letsencrypt_email` missing from all three `terraform.tfvars`**
+  The variable was added in the prior review pass but never added to the tfvars files.
+  Because it has no default, `terraform plan` would fail with "No value for required
+  variable" in CI or prompt interactively. Added a placeholder with a clear comment to
+  all three environment tfvars files.
+
+- **All nine `HelmRepository` sources used deprecated `v1beta2` API version**
+  `source.toolkit.fluxcd.io/v1beta2` was superseded by `v1` in Flux 2.3 and is
+  scheduled for removal. Updated all nine source files to `source.toolkit.fluxcd.io/v1`.
+
+### Security / Production
+
+- **Bootstrap S3 bucket had no lifecycle policy**
+  With versioning enabled but no lifecycle rule, old state file versions accumulated
+  indefinitely. Added a 90-day noncurrent version expiration rule to `bootstrap/main.tf`.
+
+- **LICENSE copyright notice had unfilled template text**
+  The copyright line still read `Copyright [yyyy] [name of copyright owner]` — the
+  boilerplate from the Apache 2.0 appendix was never filled in. Updated to credit
+  Defense Unicorns for the original work and contributors for subsequent work.
+
+### Housekeeping
+
+- **`CODEOWNERS` removed**
+  Referenced the original Defense Unicorns team (`@Racer159`, `@Noxsios`, `@jeff-mccoy`,
+  etc.) who have no relationship to this fork. Leaving a CODEOWNERS file with stale
+  names blocks merge requests by requiring approvals from people who don't have access.
+
+### LICENSE Reflection
+
+The repo inherits Apache 2.0 from the archived Defense Unicorns Zarf project. This is a
+reasonable choice with important implications:
+
+**What Apache 2.0 allows:**
+- Anyone can use, copy, modify, and distribute this code — commercially or otherwise
+- No requirement to open-source derivative works (unlike GPL)
+- Provides an explicit patent grant — contributors cannot later sue users for patent
+  infringement on the contributed code
+
+**What it requires of users:**
+- Attribution — copies and derivative works must carry the original copyright notice
+- Changed files must be marked as modified
+
+**Is it the right choice for this repo?**
+- If this is **internal infrastructure** for a single organisation and will never be
+  publicly distributed: Apache 2.0 is harmless but unnecessary. A simple proprietary
+  copyright notice (`Copyright 2025 <Your Company>. All rights reserved.`) or no LICENSE
+  file at all (which makes it implicitly proprietary) is more honest.
+- If this is a **shared internal template** you want other teams to fork freely: Apache
+  2.0 is a good fit. It's permissive, well-understood, and the patent grant is a benefit.
+- If you want to **prevent competitors from taking the code**: Apache 2.0 is not the
+  right choice. Consider a commercial license or keep the repo private with no LICENSE.
+- MIT is a simpler alternative to Apache 2.0 with equivalent permissions but no explicit
+  patent clause — fine if patent exposure is not a concern.
+
+**Recommendation:** If the repo is and will remain private/internal, replace the LICENSE
+with a proprietary copyright header. If it may be shared or open-sourced, Apache 2.0 is
+the correct choice — just ensure the copyright line names your organisation.
+
+---
+
 ## cl4.002 — Add Cilium (eBPF networking) and Kong Gateway OSS
 
 ### New Components

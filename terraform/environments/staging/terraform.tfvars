@@ -12,3 +12,5 @@ ecr_repositories = [
 ]
 
 cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"] # replace with CI runner / VPN CIDRs
+
+letsencrypt_email = "platform@example.com" # update me — used for Let's Encrypt cert expiry notifications
