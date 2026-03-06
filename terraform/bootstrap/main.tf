@@ -2,7 +2,7 @@
 # After creation, migrate state: terraform init -migrate-state
 
 terraform {
-  required_version = ">= 1.6"
+  required_version = ">= 1.9, < 2.0"
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -29,6 +29,10 @@ data "aws_caller_identity" "current" {}
 
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "terraform-state-${var.environment}-${data.aws_caller_identity.current.account_id}"
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "terraform_state" {
@@ -76,6 +80,10 @@ resource "aws_dynamodb_table" "terraform_locks" {
   attribute {
     name = "LockID"
     type = "S"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

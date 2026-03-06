@@ -11,8 +11,8 @@ variables:
   # Set these in GitLab CI/CD > Variables (masked, not protected):
   #   DEV_TF_ROLE_ARN, STAGING_TF_ROLE_ARN, PROD_TF_ROLE_ARN
   #   DEV_ECR_REGISTRY, STAGING_ECR_REGISTRY, PROD_ECR_REGISTRY
-  #   CONFIG_REPO_PATH  (e.g. my-org/k8s-config)
-  #   CONFIG_REPO_TOKEN (GitLab access token with write_repository scope)
+  #   CONFIG_REPO_PATH  (path to this repo, e.g. my-org/amsc-bluebook)
+  #   CONFIG_REPO_TOKEN (GitLab access token with write_repository scope on this repo)
   #   TF_VAR_gitlab_flux_token (GitLab deploy token, read_repository scope)
   #   TF_VAR_grafana_admin_password (initial Grafana admin password)
 
@@ -34,10 +34,10 @@ variables:
 
 # ── Terraform base ────────────────────────────────────────────────────────────
 .terraform:
-  image: hashicorp/terraform:1.7
+  image: hashicorp/terraform:1.14
   extends: .aws-auth
   cache:
-    key: terraform-${CI_ENVIRONMENT_NAME}
+    key: terraform-${ENV}
     paths:
       - ${TF_ROOT}/${ENV}/.terraform
 
@@ -169,34 +169,60 @@ tf:apply:prod:
     - if: $CI_COMMIT_TAG
       when: manual
 
-# ── Build + push image to ECR ─────────────────────────────────────────────────
-build:
+# ── Build + push image to ECR (one job per account) ──────────────────────────
+# Each environment lives in a separate AWS account with its own ECR registry.
+# The image is built once per job and pushed directly to the target account's ECR.
+.build-base:
   stage: build
   image: docker:26
   services:
     - docker:26-dind
   extends: .aws-auth
   variables:
-    # Build uses dev role for pushing — ECR repos are per-account
-    # For multi-account push, run separate jobs per account
-    AWS_ROLE_ARN: $DEV_TF_ROLE_ARN
     DOCKER_TLS_CERTDIR: "/certs"
   script:
-    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $DEV_ECR_REGISTRY
-    - docker build -t $DEV_ECR_REGISTRY/myapp/backend:$CI_COMMIT_SHORT_SHA .
-    - docker push $DEV_ECR_REGISTRY/myapp/backend:$CI_COMMIT_SHORT_SHA
+    - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REGISTRY
+    - docker build -t $ECR_REGISTRY/myapp/backend:$CI_COMMIT_SHORT_SHA .
+    - docker push $ECR_REGISTRY/myapp/backend:$CI_COMMIT_SHORT_SHA
+
+build:dev:
+  extends: .build-base
+  variables:
+    AWS_ROLE_ARN: $DEV_TF_ROLE_ARN
+    ECR_REGISTRY: $DEV_ECR_REGISTRY
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+build:staging:
+  extends: .build-base
+  variables:
+    AWS_ROLE_ARN: $STAGING_TF_ROLE_ARN
+    ECR_REGISTRY: $STAGING_ECR_REGISTRY
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      when: manual
+
+build:prod:
+  extends: .build-base
+  variables:
+    AWS_ROLE_ARN: $PROD_TF_ROLE_ARN
+    ECR_REGISTRY: $PROD_ECR_REGISTRY
+  rules:
     - if: $CI_COMMIT_TAG
+      when: manual
 
 # ── Deploy: bump image tag in config repo, Flux reconciles ───────────────────
+# Uses yq for YAML-safe tag replacement — sed would clobber any other key
+# named "tag:" and strip indentation from the matched line.
 .deploy:
   stage: deploy
   image: alpine/git
+  before_script:
+    - apk add --no-cache yq
   script:
     - git clone https://oauth2:${CONFIG_REPO_TOKEN}@${CI_SERVER_HOST}/${CONFIG_REPO_PATH} config
     - cd config
-    - sed -i "s|tag:.*|tag: ${CI_COMMIT_SHORT_SHA}|" clusters/${DEPLOY_ENV}/apps/myapp-values.yaml
+    - yq -i ".spec.values.image.tag = strenv(CI_COMMIT_SHORT_SHA)" clusters/${DEPLOY_ENV}/apps/myapp.yaml
     - git config user.email "ci@gitlab.local"
     - git config user.name "GitLab CI"
     - git diff --quiet || git commit -am "chore(${DEPLOY_ENV}): bump myapp to ${CI_COMMIT_SHORT_SHA}"
@@ -207,7 +233,7 @@ deploy:dev:
   variables:
     DEPLOY_ENV: dev
   needs:
-    - build
+    - build:dev
   environment:
     name: dev
   rules:
@@ -218,7 +244,7 @@ deploy:staging:
   variables:
     DEPLOY_ENV: staging
   needs:
-    - build
+    - build:staging
   environment:
     name: staging
   rules:
@@ -230,7 +256,7 @@ deploy:prod:
   variables:
     DEPLOY_ENV: prod
   needs:
-    - build
+    - build:prod
   environment:
     name: production
   rules:

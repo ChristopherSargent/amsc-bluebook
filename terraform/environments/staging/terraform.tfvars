@@ -1,9 +1,10 @@
-aws_region   = "us-east-1"
-environment  = "staging"
-cluster_name = "eks-staging"
+aws_region       = "us-east-1"
+environment      = "staging"
+cluster_name     = "eks-staging"
+cluster_version  = "1.32"
 
 gitlab_url          = "https://gitlab.com"
-config_repo_path    = "my-org/k8s-config"   # update me
+config_repo_path    = "my-org/amsc-bluebook"  # update me — path to THIS repo in GitLab
 gitlab_project_path = "my-org/my-app"        # update me
 
 ecr_repositories = [

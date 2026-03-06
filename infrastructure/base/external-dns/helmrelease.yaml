@@ -10,7 +10,7 @@ spec:
   chart:
     spec:
       chart: external-dns
-      version: "1.14.*"
+      version: "1.20.*"
       sourceRef:
         kind: HelmRepository
         name: external-dns
@@ -29,3 +29,9 @@ spec:
     sources:
       - service
       - ingress
+    resources:
+      requests:
+        cpu: 10m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

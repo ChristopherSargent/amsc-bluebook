@@ -2,7 +2,6 @@
 #   - larger node sizes
 #   - single_nat_gateway = false (HA)
 #   - cluster_name = eks-staging
-# Copy dev/main.tf here and update the two values below.
 
 locals {
   tags = {
@@ -38,7 +37,7 @@ module "eks" {
   source = "../../modules/eks"
 
   cluster_name                         = var.cluster_name
-  cluster_version                      = "1.30"
+  cluster_version                      = var.cluster_version
   vpc_id                               = module.vpc.vpc_id
   subnet_ids                           = module.vpc.private_subnets
   node_instance_type                   = "t3.large"
@@ -133,7 +132,7 @@ resource "helm_release" "external_secrets" {
   name             = "external-secrets"
   repository       = "https://charts.external-secrets.io"
   chart            = "external-secrets"
-  version          = "0.9.20"
+  version          = "2.0.1"
   namespace        = "external-secrets"
   create_namespace = true
 

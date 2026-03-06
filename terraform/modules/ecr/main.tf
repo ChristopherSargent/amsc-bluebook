@@ -1,9 +1,13 @@
 resource "aws_kms_key" "ecr" {
   count                   = length(var.repositories) > 0 ? 1 : 0
   description             = "ECR image encryption key"
-  deletion_window_in_days = 7
+  deletion_window_in_days = 30
   enable_key_rotation     = true
   tags                    = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_ecr_repository" "this" {

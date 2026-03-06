@@ -10,13 +10,14 @@ spec:
   chart:
     spec:
       chart: cert-manager
-      version: "1.14.*"
+      version: "1.19.*"
       sourceRef:
         kind: HelmRepository
         name: jetstack
         namespace: flux-system
   values:
-    installCRDs: true
+    crds:
+      enabled: true
     serviceAccount:
       create: true
       name: cert-manager
@@ -24,3 +25,9 @@ spec:
         eks.amazonaws.com/role-arn: ${CERT_MANAGER_ROLE_ARN}
     securityContext:
       fsGroup: 1001
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

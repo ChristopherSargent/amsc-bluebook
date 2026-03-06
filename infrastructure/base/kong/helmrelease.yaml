@@ -13,7 +13,7 @@ spec:
       # Manages Kong Gateway via KongRoute, KongService, and Ingress CRDs.
       # Kong Gateway (OSS) is fully open source under Apache 2.0.
       chart: ingress
-      version: "0.12.*"
+      version: "0.22.*"
       sourceRef:
         kind: HelmRepository
         name: kong

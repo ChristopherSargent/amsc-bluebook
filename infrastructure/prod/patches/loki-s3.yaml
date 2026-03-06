@@ -1,0 +1,72 @@
+# Prod overlay: switches Loki from ephemeral filesystem to S3-backed SimpleScalable mode.
+# Applied as a strategic merge patch on top of infrastructure/base/loki/helmrelease.yaml.
+# LOKI_BUCKET and LOKI_ROLE_ARN are injected by Flux substituteFrom from cluster-vars ConfigMap.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: loki
+  namespace: monitoring
+spec:
+  values:
+    deploymentMode: SimpleScalable
+
+    loki:
+      auth_enabled: false
+      commonConfig:
+        replication_factor: 2
+      storage:
+        type: s3
+        bucketNames:
+          chunks: ${LOKI_BUCKET}
+          ruler: ${LOKI_BUCKET}
+          admin: ${LOKI_BUCKET}
+        s3:
+          region: ${AWS_REGION}
+      schemaConfig:
+        configs:
+          - from: "2024-01-01"
+            store: tsdb
+            object_store: s3
+            schema: v13
+            index:
+              prefix: loki_index_
+              period: 24h
+
+    # Single service account used by all SimpleScalable components (backend/read/write).
+    # The IRSA annotation allows Loki to authenticate to S3 without static credentials.
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: ${LOKI_ROLE_ARN}
+
+    backend:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    read:
+      replicas: 2
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    write:
+      replicas: 3
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 512Mi
+
+    # Disable single-binary — SimpleScalable uses backend/read/write instead.
+    singleBinary:
+      replicas: 0
+
