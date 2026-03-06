@@ -169,12 +169,13 @@ Each environment directory contains:
 - [flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) — required to monitor reconciliation and force resyncs
 - `kubectl` — for manual cluster inspection
 - `helm` — optional but needed for debugging HelmRelease failures (`helm list -A`, `helm status`)
+- `docker` — required to build the custom Kong image (`docker/kong/Dockerfile`) before first deploy
 
 **AWS** (per target account):
 
 - An AWS account with permissions to create IAM, EKS, ECR, VPC, S3, KMS, and DynamoDB resources
 - A **Route53 hosted zone** for your domain in each account — required by cert-manager (DNS-01 TLS challenge) and External DNS (automatic record creation). If you don't have one, create it in the AWS console before running Terraform.
-- A **domain name** delegated to that hosted zone
+- A **domain name** delegated to that hosted zone — you will need resolvable hostnames for MLflow and OpenMetadata (e.g. `mlflow.dev.your-domain.com`, `openmetadata.dev.your-domain.com`)
 - No other pre-existing infrastructure required — Terraform creates everything else
 
 **GitLab**:
@@ -183,13 +184,26 @@ Each environment directory contains:
 - A separate GitLab project for your app code (source of Docker builds)
 - A GitLab Runner with Docker-in-Docker support (for image builds)
 
+**Globus Auth**:
+
+- A [Globus Auth](https://www.globus.org/platform/services/auth) account (free) and a registered application — this provides the OIDC client credentials used by Kong to authenticate all platform users.
+- Register at [app.globus.org/settings/developers](https://app.globus.org/settings/developers): create a new app, set the redirect URI to `https://<OPENMETADATA_HOST>/callback`, and note the `client_id` and `client_secret`.
+- Globus Auth is a research identity federation service — it allows users to log in via their institutional identity (university, national lab) without requiring a separate account.
+
+**MLflow database**:
+
+- MLflow requires a PostgreSQL backend store. For dev/staging an in-cluster PostgreSQL pod is sufficient (deployed separately or via a Helm chart you add to `apps/base/`). For prod, an RDS PostgreSQL instance is recommended. The hostname is set via `mlflow_db_host` in `terraform.tfvars`.
+
 **Before you deploy, update these placeholders:**
 
 | Placeholder | File | What to set |
 |---|---|---|
 | `config_repo_path = "my-org/amsc-bluebook"` | `terraform/environments/*/terraform.tfvars` | GitLab path to **this** repo (e.g. `john-doe/amsc-bluebook`). Terraform passes it to the Flux provider so Flux knows where to bootstrap. |
-| `gitlab_project_path = "my-org/my-app"` | `terraform/environments/*/terraform.tfvars` | GitLab path to your **app source** repo (e.g. `john-doe/my-api`). Used only to construct the IAM OIDC trust condition — controls which GitLab project is allowed to assume the AWS deploy role. |
-| `myapp/backend` | `.gitlab-ci.yml` | ECR repository name for your app image. Must match an entry in `ecr_repositories` in `terraform.tfvars`. The `build:*` jobs push to `$ECR_REGISTRY/<this-name>:$CI_COMMIT_SHORT_SHA` — update it to match your actual repo name (e.g. `john-doe-api/server`). |
+| `gitlab_project_path = "my-org/my-app"` | `terraform/environments/*/terraform.tfvars` | GitLab path to your **app source** repo. Used only to construct the IAM OIDC trust condition. |
+| `mlflow_host = ""` | `terraform/environments/*/terraform.tfvars` | DNS hostname for the MLflow ingress, e.g. `mlflow.dev.your-domain.com`. Must be within the Route53 hosted zone. |
+| `openmetadata_host = ""` | `terraform/environments/*/terraform.tfvars` | DNS hostname for the OpenMetadata ingress, e.g. `openmetadata.dev.your-domain.com`. |
+| `kong_image_repository = ""` | `terraform/environments/*/terraform.tfvars` | ECR URL for the custom Kong image — set after adding `kong-custom` to `ecr_repositories` and pushing the image (see Step 5). |
+| `myapp/backend` | `.gitlab-ci.yml` | ECR repository name for your app image. Must match an entry in `ecr_repositories` in `terraform.tfvars`. |
 
 > **Note:** The `build:*` and `deploy:*` jobs in `.gitlab-ci.yml` are provided as a reference template. They are intended to live in your **app repo's** CI pipeline, not this one. Copy the `.build-base`, `.deploy`, and `.aws-auth` blocks into your app project's `.gitlab-ci.yml` and adjust the `docker build` context and image name there.
 

@@ -368,6 +368,84 @@ module "loki_irsa" {
   tags = local.tags
 }
 
+# ── 10. MLflow (S3 artifact store) ───────────────────────────────────────────
+
+resource "aws_s3_bucket" "mlflow" {
+  bucket = "mlflow-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  tags   = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "mlflow" {
+  bucket = aws_s3_bucket.mlflow.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "mlflow" {
+  bucket = aws_s3_bucket.mlflow.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "mlflow" {
+  bucket                  = aws_s3_bucket.mlflow.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "mlflow" {
+  bucket = aws_s3_bucket.mlflow.id
+
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+module "mlflow_irsa" {
+  source            = "../../modules/irsa"
+  role_name         = "mlflow-${var.environment}"
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider     = module.eks.oidc_provider
+  namespace         = "mlflow"
+  service_account   = "mlflow"
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject", "s3:DeleteObject", "s3:PutObject",
+          "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+        ]
+        Resource = "${aws_s3_bucket.mlflow.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.mlflow.arn
+      },
+    ]
+  })
+
+  tags = local.tags
+}
+
 # ── cluster-vars ConfigMap ────────────────────────────────────────────────────
 # Terraform writes all environment-specific values here after creating IAM roles.
 # Flux HelmReleases consume them via `substituteFrom` so no ARNs need to be
@@ -395,6 +473,13 @@ resource "kubernetes_config_map" "cluster_vars" {
     LOKI_ROLE_ARN             = module.loki_irsa.role_arn
     LOKI_BUCKET               = aws_s3_bucket.loki.bucket
     LETSENCRYPT_EMAIL         = var.letsencrypt_email
+    KONG_IMAGE_REPOSITORY     = var.kong_image_repository
+    KONG_IMAGE_TAG            = var.kong_image_tag
+    MLFLOW_ROLE_ARN           = module.mlflow_irsa.role_arn
+    MLFLOW_ARTIFACT_BUCKET    = aws_s3_bucket.mlflow.bucket
+    MLFLOW_DB_HOST            = var.mlflow_db_host
+    MLFLOW_HOST               = var.mlflow_host
+    OPENMETADATA_HOST         = var.openmetadata_host
   }
 
   depends_on = [flux_bootstrap_git.this]
@@ -413,7 +498,11 @@ resource "kubernetes_secret" "cluster_secrets" {
   }
 
   data = {
-    GRAFANA_ADMIN_PASSWORD = var.grafana_admin_password
+    GRAFANA_ADMIN_PASSWORD      = var.grafana_admin_password
+    GLOBUS_CLIENT_ID            = var.globus_client_id
+    GLOBUS_CLIENT_SECRET        = var.globus_client_secret
+    MLFLOW_DB_PASSWORD          = var.mlflow_db_password
+    OPENMETADATA_JWT_SECRET     = var.openmetadata_jwt_secret
   }
 
   depends_on = [flux_bootstrap_git.this]

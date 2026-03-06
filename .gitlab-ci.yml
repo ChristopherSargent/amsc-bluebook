@@ -222,7 +222,7 @@ build:prod:
   script:
     - git clone https://oauth2:${CONFIG_REPO_TOKEN}@${CI_SERVER_HOST}/${CONFIG_REPO_PATH} config
     - cd config
-    - yq -i ".spec.values.image.tag = strenv(CI_COMMIT_SHORT_SHA)" clusters/${DEPLOY_ENV}/apps/myapp.yaml
+    - yq -i ".spec.values.image.tag = strenv(CI_COMMIT_SHORT_SHA)" apps/base/myapp/helmrelease.yaml
     - git config user.email "ci@gitlab.local"
     - git config user.name "GitLab CI"
     - git diff --quiet || git commit -am "chore(${DEPLOY_ENV}): bump myapp to ${CI_COMMIT_SHORT_SHA}"

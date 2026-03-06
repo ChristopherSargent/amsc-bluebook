@@ -62,3 +62,54 @@ variable "letsencrypt_email" {
   type        = string
   description = "Email address for Let's Encrypt certificate notifications and expiry warnings."
 }
+
+variable "globus_client_id" {
+  type        = string
+  description = "Globus Auth application client ID. Set via TF_VAR_globus_client_id — never commit."
+  sensitive   = true
+}
+
+variable "globus_client_secret" {
+  type        = string
+  description = "Globus Auth application client secret. Set via TF_VAR_globus_client_secret — never commit."
+  sensitive   = true
+}
+
+variable "mlflow_db_password" {
+  type        = string
+  description = "PostgreSQL password for the MLflow backend store. Set via TF_VAR_mlflow_db_password — never commit."
+  sensitive   = true
+}
+
+variable "openmetadata_jwt_secret" {
+  type        = string
+  description = "Random secret used by OpenMetadata for internal JWT signing. Set via TF_VAR_openmetadata_jwt_secret — never commit."
+  sensitive   = true
+}
+
+variable "mlflow_db_host" {
+  type        = string
+  description = "PostgreSQL hostname for the MLflow backend store (RDS endpoint recommended for prod)."
+  default     = "postgresql.mlflow.svc.cluster.local"
+}
+
+variable "mlflow_host" {
+  type        = string
+  description = "Public DNS hostname for the MLflow ingress (e.g. mlflow.your-domain.com)."
+}
+
+variable "openmetadata_host" {
+  type        = string
+  description = "Public DNS hostname for the OpenMetadata ingress (e.g. openmetadata.your-domain.com)."
+}
+
+variable "kong_image_repository" {
+  type        = string
+  description = "ECR repository URL for the custom Kong image."
+}
+
+variable "kong_image_tag" {
+  type        = string
+  description = "Tag of the custom Kong image to deploy."
+  default     = "3.9.0"
+}

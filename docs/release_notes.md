@@ -2,6 +2,70 @@
 
 ---
 
+## cl4.005 — Production readiness audit: Terraform completeness and CI path fixes
+
+### Bug Fixes
+
+- **`platform.tf` missing all new variables for apps and Kong custom image (all three environments)**
+  (`terraform/environments/*/platform.tf`, `terraform/environments/*/variables.tf`)
+  The `cluster-vars` ConfigMap and `cluster-secrets` Secret provisioned by Terraform
+  only contained the original platform variables. All HelmReleases that reference
+  `${KONG_IMAGE_REPOSITORY}`, `${KONG_IMAGE_TAG}`, `${GLOBUS_CLIENT_ID}`,
+  `${GLOBUS_CLIENT_SECRET}`, `${MLFLOW_*}`, and `${OPENMETADATA_*}` via Flux
+  `substituteFrom` would have rendered with literal placeholder strings and failed.
+  Added all missing keys to `cluster-vars` and `cluster-secrets` in all three
+  environments, and added the corresponding variable declarations to `variables.tf`.
+
+- **MLflow S3 artifact bucket and IRSA role not provisioned (all three environments)**
+  (`terraform/environments/*/platform.tf`)
+  `apps/base/mlflow/helmrelease.yaml` references `${MLFLOW_ROLE_ARN}` and
+  `${MLFLOW_ARTIFACT_BUCKET}`, but neither the S3 bucket nor the IRSA role existed
+  in Terraform. Added `aws_s3_bucket.mlflow` (KMS-encrypted, versioned, public access
+  blocked, 90-day noncurrent version lifecycle) and `module.mlflow_irsa` (scoped to
+  the `mlflow` service account, S3 read/write on the artifact bucket) to all three
+  environments.
+
+- **`variables.tf` missing declarations for new sensitive variables (all three environments)**
+  (`terraform/environments/*/variables.tf`)
+  `TF_VAR_globus_client_id`, `TF_VAR_globus_client_secret`, `TF_VAR_mlflow_db_password`,
+  and `TF_VAR_openmetadata_jwt_secret` were referenced in the README but not declared
+  in any `variables.tf`. `terraform plan` would error immediately with "No value for
+  required variable." Also added `mlflow_db_host`, `mlflow_host`, `openmetadata_host`,
+  `kong_image_repository`, and `kong_image_tag` as non-sensitive variables.
+
+- **`.gitlab-ci.yml` deploy job referenced stale `clusters/${DEPLOY_ENV}/apps/myapp.yaml` path**
+  (`.gitlab-ci.yml`)
+  The deploy template still used the pre-`apps/` tree path. Any team using this
+  template would write the image tag to a non-existent file and the deploy would
+  silently succeed without Flux picking up any change. Updated to
+  `apps/base/myapp/helmrelease.yaml` to match the new repository structure.
+
+### Documentation
+
+- **Prerequisites section incomplete — missing Docker, Globus registration, DNS hostnames, MLflow database, and new `terraform.tfvars` placeholders**
+  (`README.md`)
+  The prerequisites section only covered tools, AWS, and GitLab. It gave no guidance
+  on the three additional requirements introduced with the data platform layer:
+  `docker` (needed to build the custom Kong image), Globus Auth app registration
+  (needed before any `terraform apply` that writes `cluster-secrets`), and a
+  PostgreSQL instance for MLflow. The "Before you deploy" placeholders table also
+  omitted the five new `terraform.tfvars` variables. All gaps filled.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `terraform/environments/dev/variables.tf` | Added `globus_client_id`, `globus_client_secret`, `mlflow_db_password`, `openmetadata_jwt_secret`, `mlflow_db_host`, `mlflow_host`, `openmetadata_host`, `kong_image_repository`, `kong_image_tag` |
+| `terraform/environments/staging/variables.tf` | Same |
+| `terraform/environments/prod/variables.tf` | Same |
+| `terraform/environments/dev/platform.tf` | Added MLflow S3 bucket + IRSA; added new keys to `cluster-vars` and `cluster-secrets` |
+| `terraform/environments/staging/platform.tf` | Same |
+| `terraform/environments/prod/platform.tf` | Same |
+| `.gitlab-ci.yml` | Deploy path `clusters/${DEPLOY_ENV}/apps/myapp.yaml` → `apps/base/myapp/helmrelease.yaml` |
+| `README.md` | Prerequisites: added `docker` to tools; added Globus Auth section; added MLflow database section; expanded domain name note; added `mlflow_host`, `openmetadata_host`, `kong_image_repository` to placeholders table |
+
+---
+
 ## cl4.005 — Data platform applications: MLflow, OpenMetadata, and Globus OIDC via Kong
 
 ### New Features
