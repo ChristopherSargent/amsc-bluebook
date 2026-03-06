@@ -19,3 +19,7 @@ patches:
     target:
       kind: HelmRelease
       name: loki
+  - path: patches/promtail.yaml
+    target:
+      kind: HelmRelease
+      name: promtail

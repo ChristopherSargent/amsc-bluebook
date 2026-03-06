@@ -1,0 +1,15 @@
+# Prod overlay: redirects Promtail to the Loki gateway service.
+# In SingleBinary mode (dev/staging) the push target is loki:3100.
+# In SimpleScalable mode (prod) an NGINX gateway is deployed as
+# loki-gateway:80 and all ingest must go through it — pushing directly
+# to the distributor port is not supported in this topology.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: promtail
+  namespace: monitoring
+spec:
+  values:
+    config:
+      clients:
+        - url: http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push

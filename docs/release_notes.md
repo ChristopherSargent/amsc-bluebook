@@ -2,6 +2,62 @@
 
 ---
 
+## cl4.004 — Production deployment audit: three critical bug fixes
+
+### Bug Fixes
+
+- **`terraform.tfvars` `cluster_version` still `"1.30"` in all three environments**
+  (`terraform/environments/dev/terraform.tfvars`,
+  `terraform/environments/staging/terraform.tfvars`,
+  `terraform/environments/prod/terraform.tfvars`)
+  `terraform.tfvars` values override `variables.tf` defaults — the earlier fix to
+  `variables.tf` had no effect at deploy time. All three clusters would have launched
+  on Kubernetes 1.30 (end of standard support) despite the stated target of 1.32.
+  Updated `cluster_version = "1.32"` in all three tfvars files.
+
+- **Velero plugin version incompatible with Velero 1.17.1 (chart 11.4.0)**
+  (`infrastructure/base/velero/helmrelease.yaml`)
+  The velero-plugin-for-aws follows a strict compatibility matrix where plugin minor
+  version must match the Velero minor version:
+
+  | Plugin | Velero |
+  |---|---|
+  | v1.10.x | v1.14.x |
+  | v1.11.x | v1.15.x |
+  | v1.12.x | v1.16.x |
+  | v1.13.x | v1.17.x |
+
+  The repo pinned `v1.10.0` (Velero 1.14). Chart 11.4.0 ships `appVersion: 1.17.1`.
+  On first deploy Velero would initialize and immediately fail to register the backup
+  storage location. Updated plugin to `v1.13.0`.
+
+- **Promtail push URL incorrect for prod SimpleScalable Loki topology**
+  (`infrastructure/prod/patches/promtail.yaml`,
+  `infrastructure/prod/kustomization.yaml`)
+  The base promtail config pushes to `http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push`.
+  This is correct for dev/staging (SingleBinary mode, service `loki` on port 3100).
+  In prod, Loki runs in SimpleScalable mode which deploys an NGINX gateway as service
+  `loki-gateway` on port 80. Pushing directly to the `loki` service in this topology
+  bypasses the gateway and hits the wrong component — no logs would reach the write
+  path. Added `infrastructure/prod/patches/promtail.yaml` as a strategic merge patch
+  that overrides the Loki URL to
+  `http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push`.
+  Wired into `infrastructure/prod/kustomization.yaml` alongside the existing
+  `loki-s3.yaml` patch.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `terraform/environments/dev/terraform.tfvars` | `cluster_version` `"1.30"` → `"1.32"` |
+| `terraform/environments/staging/terraform.tfvars` | `cluster_version` `"1.30"` → `"1.32"` |
+| `terraform/environments/prod/terraform.tfvars` | `cluster_version` `"1.30"` → `"1.32"` |
+| `infrastructure/base/velero/helmrelease.yaml` | Plugin `v1.10.0` → `v1.13.0` |
+| `infrastructure/prod/patches/promtail.yaml` | New — overrides Loki push URL to `loki-gateway:80` for SimpleScalable |
+| `infrastructure/prod/kustomization.yaml` | Added `promtail.yaml` to patches |
+
+---
+
 ## cl4.004 — Version refresh, log collection fix, security hardening, and production readiness audit
 
 ### Bug Fixes

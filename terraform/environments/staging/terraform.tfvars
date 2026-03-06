@@ -1,7 +1,7 @@
 aws_region       = "us-east-1"
 environment      = "staging"
 cluster_name     = "eks-staging"
-cluster_version  = "1.30"
+cluster_version  = "1.32"
 
 gitlab_url          = "https://gitlab.com"
 config_repo_path    = "my-org/amsc-bluebook"  # update me — path to THIS repo in GitLab
