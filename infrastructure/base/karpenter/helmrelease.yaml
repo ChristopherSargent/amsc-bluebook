@@ -8,7 +8,7 @@ spec:
   chart:
     spec:
       chart: karpenter
-      version: "1.0.*"
+      version: "1.9.*"
       sourceRef:
         # Karpenter 1.0+ is published to an OCI registry, not eks-charts.
         kind: HelmRepository

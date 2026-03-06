@@ -141,7 +141,7 @@ Each environment directory contains:
 
 **Tools** (install once locally and on your CI runner):
 
-- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.6
+- [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.9
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) v2
 - `kubectl` (for manual cluster inspection)
 
@@ -202,7 +202,7 @@ terraform {
 gitlab_url          = "https://gitlab.com"
 config_repo_path    = "my-org/amsc-bluebook"  # path to THIS repo in GitLab — Flux bootstraps here
 gitlab_project_path = "my-org/my-app"          # the app source repo — used in CI OIDC trust condition
-cluster_version     = "1.30"
+cluster_version     = "1.32"
 ecr_repositories    = ["myapp/backend", "myapp/frontend"]
 
 cluster_endpoint_public_access_cidrs = ["203.0.113.0/24"]  # see Step 2.3 below
@@ -486,7 +486,7 @@ Creates an EKS cluster using `terraform-aws-modules/eks` v20.
 | Variable | Default | Description |
 |---|---|---|
 | `cluster_name` | required | EKS cluster name |
-| `cluster_version` | `"1.30"` | Kubernetes version — set in `terraform.tfvars` |
+| `cluster_version` | `"1.32"` | Kubernetes version — set in `terraform.tfvars` |
 | `vpc_id` | required | VPC to deploy into |
 | `subnet_ids` | required | Private subnets for node group |
 | `node_instance_type` | `t3.medium` | EC2 instance type |
