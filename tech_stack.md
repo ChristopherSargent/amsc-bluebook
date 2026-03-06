@@ -9,7 +9,7 @@ All technologies, tools, and services used in this repository, with reference li
 | Technology | Version / Tier | Reference |
 |---|---|---|
 | Amazon Web Services (AWS) | — | https://aws.amazon.com |
-| Amazon EKS | 1.30 (configurable) | https://docs.aws.amazon.com/eks |
+| Amazon EKS | 1.32 (configurable) | https://docs.aws.amazon.com/eks |
 | Amazon ECR | — | https://docs.aws.amazon.com/ecr |
 | Amazon VPC | — | https://docs.aws.amazon.com/vpc |
 | AWS IAM (OIDC + IRSA) | — | https://docs.aws.amazon.com/iam |
@@ -27,7 +27,7 @@ All technologies, tools, and services used in this repository, with reference li
 
 | Technology | Version | Reference |
 |---|---|---|
-| Terraform | >= 1.6 | https://developer.hashicorp.com/terraform |
+| Terraform | >= 1.9, < 2.0 | https://developer.hashicorp.com/terraform |
 | terraform-aws-modules/vpc | ~> 5.0 | https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws |
 | terraform-aws-modules/eks | ~> 20.0 | https://registry.terraform.io/modules/terraform-aws-modules/eks/aws |
 
@@ -75,8 +75,8 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| Cilium (eBPF networking + Hubble) | 1.15.x | `kube-system` | https://cilium.io |
-| AWS Load Balancer Controller | 1.8.x | `kube-system` | https://kubernetes-sigs.github.io/aws-load-balancer-controller |
+| Cilium (eBPF networking + Hubble) | 1.18.x | `kube-system` | https://cilium.io |
+| AWS Load Balancer Controller | 3.1.x | `kube-system` | https://kubernetes-sigs.github.io/aws-load-balancer-controller |
 | Kong Gateway OSS (Ingress Controller) | ingress 0.22.x | `kong` | https://docs.konghq.com/kubernetes-ingress-controller |
 | kong-openid-connect (community plugin) | latest via luarocks | `kong` | https://github.com/cuongntr/kong-openid-connect-plugin |
 
@@ -84,27 +84,27 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| Karpenter | 1.0.x | `kube-system` | https://karpenter.sh |
-| Metrics Server | 3.12.x | `kube-system` | https://github.com/kubernetes-sigs/metrics-server |
+| Karpenter | 1.9.x | `kube-system` | https://karpenter.sh |
+| Metrics Server | 3.13.x | `kube-system` | https://github.com/kubernetes-sigs/metrics-server |
 
 ### TLS and DNS
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| cert-manager | 1.14.x | `cert-manager` | https://cert-manager.io |
+| cert-manager | 1.19.x | `cert-manager` | https://cert-manager.io |
 | Let's Encrypt (ACME DNS-01) | — | — | https://letsencrypt.org |
-| External DNS | 1.14.x | `external-dns` | https://github.com/kubernetes-sigs/external-dns |
+| External DNS | 1.20.x | `external-dns` | https://github.com/kubernetes-sigs/external-dns |
 
 ### Observability
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| kube-prometheus-stack | 58.x | `monitoring` | https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack |
+| kube-prometheus-stack | 82.9.x | `monitoring` | https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack |
 | Prometheus | (bundled) | `monitoring` | https://prometheus.io |
 | Grafana | (bundled) | `monitoring` | https://grafana.com |
 | Alertmanager | (bundled) | `monitoring` | https://prometheus.io/docs/alerting/latest/alertmanager |
-| Loki | 6.x | `monitoring` | https://grafana.com/oss/loki |
-| Promtail | (bundled with Loki) | `monitoring` | https://grafana.com/docs/loki/latest/send-data/promtail |
+| Loki | 6.53.x | `monitoring` | https://grafana.com/oss/loki |
+| Promtail | 6.17.x (standalone HelmRelease) | `monitoring` | https://grafana.com/docs/loki/latest/send-data/promtail |
 
 ### Backup
 
@@ -119,7 +119,7 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 |---|---|---|---|
 | MLflow | 0.x (community-charts) | `mlflow` | https://mlflow.org |
 | OpenMetadata | 1.x | `openmetadata` | https://open-metadata.org |
-| openmetadata-dependencies (Elasticsearch + MySQL) | 1.x | `openmetadata` | https://helm.open-metadata.org |
+| openmetadata-dependencies (Elasticsearch + MySQL) | 1.x | `openmetadata` | https://github.com/open-metadata/openmetadata-helm-charts |
 
 ### Authentication
 
