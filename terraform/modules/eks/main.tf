@@ -1,9 +1,13 @@
 # Bug fix: KMS key for envelope encryption of Kubernetes secrets at rest
 resource "aws_kms_key" "eks_secrets" {
   description             = "EKS secrets encryption - ${var.cluster_name}"
-  deletion_window_in_days = 7
+  deletion_window_in_days = 30
   enable_key_rotation     = true
   tags                    = var.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_kms_alias" "eks_secrets" {

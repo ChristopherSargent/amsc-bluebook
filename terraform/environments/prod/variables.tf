@@ -13,6 +13,12 @@ variable "cluster_name" {
   default = "eks-prod"
 }
 
+variable "cluster_version" {
+  type        = string
+  description = "Kubernetes version for the EKS cluster"
+  default     = "1.30"
+}
+
 variable "gitlab_url" {
   type        = string
   description = "GitLab instance base URL (e.g. https://gitlab.com or https://gitlab.example.com)"
@@ -20,7 +26,7 @@ variable "gitlab_url" {
 
 variable "config_repo_path" {
   type        = string
-  description = "GitLab group/project path for the config repo (e.g. my-org/k8s-config)"
+  description = "GitLab group/project path for this repo — Flux bootstraps here (e.g. my-org/amsc-bluebook)"
 }
 
 variable "gitlab_flux_token" {

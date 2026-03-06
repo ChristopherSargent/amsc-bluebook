@@ -2,6 +2,133 @@
 
 ---
 
+## cl4.004 — Security hardening, reliability, and CI correctness pass
+
+### Bug Fixes
+
+- **CI deploy job corrupted YAML with `sed`; `yq` path targeted wrong YAML level**
+  (`.gitlab-ci.yml`)
+  `sed -i "s|tag:.*|tag: ${CI_COMMIT_SHORT_SHA}|"` had two bugs: it matched any YAML
+  key named `tag:` (not only `image.tag`), and it stripped leading whitespace from the
+  matched line, producing invalid YAML indentation. Replaced with `yq`. Additionally, the
+  initial `yq` path `.image.tag` targeted the document root rather than the correct
+  `spec.values.image.tag` path inside the HelmRelease manifest. Fixed to
+  `yq -i ".spec.values.image.tag = strenv(CI_COMMIT_SHORT_SHA)" clusters/${DEPLOY_ENV}/apps/myapp.yaml`.
+  The target filename is now `myapp.yaml` (the HelmRelease) instead of `myapp-values.yaml`.
+  The deploy base image (`alpine/git`) gains a `before_script` step to install `yq` via `apk`.
+
+- **CI build job only pushed to dev ECR; staging and prod could not pull the image**
+  (`.gitlab-ci.yml`)
+  The single `build` job assumed `$DEV_TF_ROLE_ARN` and pushed only to `$DEV_ECR_REGISTRY`.
+  Since each environment is a separate AWS account with its own ECR registry, nodes in
+  staging and prod had no access to the image. The `build` job has been split into three
+  jobs extending a shared `.build-base` template:
+  - `build:dev` — assumes `$DEV_TF_ROLE_ARN`, pushes to `$DEV_ECR_REGISTRY`, runs auto on `main`
+  - `build:staging` — assumes `$STAGING_TF_ROLE_ARN`, pushes to `$STAGING_ECR_REGISTRY`, manual
+  - `build:prod` — assumes `$PROD_TF_ROLE_ARN`, pushes to `$PROD_ECR_REGISTRY`, manual on tags
+  Each `deploy:<env>` now gates on its corresponding `build:<env>` via `needs:`.
+
+### Security
+
+- **KMS key deletion window was 7 days in all environments**
+  (`terraform/modules/eks/main.tf`, `terraform/modules/ecr/main.tf`)
+  AWS recommends 30 days for production KMS keys to allow time to detect and recover
+  from accidental deletion before the key is permanently destroyed. Changed
+  `deletion_window_in_days` from `7` to `30` in both the EKS secrets KMS key and the
+  ECR encryption KMS key.
+
+- **No destruction protection on critical persistent resources**
+  (`terraform/modules/eks/main.tf`, `terraform/modules/ecr/main.tf`,
+  `terraform/environments/*/platform.tf`)
+  A `terraform destroy` in the wrong environment would permanently delete KMS keys and
+  backup buckets. Added `lifecycle { prevent_destroy = true }` to:
+  - `aws_kms_key.eks_secrets` — EKS secrets envelope encryption key
+  - `aws_kms_key.ecr` — ECR image encryption key
+  - `aws_s3_bucket.velero` — backup storage (all three environments)
+  - `aws_s3_bucket.loki` — log storage (all three environments, new resource)
+
+### Reliability
+
+- **Loki used ephemeral filesystem storage in all environments**
+  (`infrastructure/base/loki/helmrelease.yaml`, `infrastructure/prod/`)
+  The base HelmRelease used `storage.type: filesystem` with a single-binary replica.
+  A pod restart or rescheduling permanently deleted all log data. In prod this is
+  unacceptable. The fix has two parts:
+
+  1. **Terraform** (`terraform/environments/*/platform.tf`): A dedicated Loki S3 bucket
+     is provisioned in all three environments (KMS-encrypted, versioned, public access
+     blocked, 30-day noncurrent version expiry). An IRSA role for the `loki` service
+     account in `monitoring` is created with scoped S3 read/write permissions.
+     `LOKI_ROLE_ARN` and `LOKI_BUCKET` are added to the `cluster-vars` ConfigMap so
+     Flux HelmReleases can consume them via `substituteFrom`.
+
+  2. **Flux** (`infrastructure/prod/patches/loki-s3.yaml`,
+     `infrastructure/prod/kustomization.yaml`): A kustomize strategic merge patch is
+     applied on top of the base HelmRelease in prod only. It switches Loki to
+     `deploymentMode: SimpleScalable` with 3 write replicas, 2 read replicas, and 2
+     backend replicas backed by the S3 bucket. The IRSA annotation on the service
+     account allows S3 access without static credentials. Dev and staging continue to
+     use the filesystem mode (no operational impact).
+
+- **Velero S3 bucket accumulated noncurrent object versions indefinitely**
+  (`terraform/environments/*/platform.tf`)
+  Versioning was enabled on the Velero bucket but no lifecycle rule expired old versions.
+  With frequent backup cycles, orphaned object versions accumulated without bound.
+  Added `aws_s3_bucket_lifecycle_configuration.velero` with a 90-day noncurrent version
+  expiration rule to all three environments, consistent with the state bucket.
+
+### Maintainability
+
+- **Kubernetes version was hardcoded in all three `main.tf` files**
+  (`terraform/environments/*/main.tf`, `terraform/environments/*/variables.tf`,
+  `terraform/environments/*/terraform.tfvars`)
+  `cluster_version = "1.30"` was a literal in each environment's `main.tf`. Upgrading
+  Kubernetes required editing three source files. Added a `cluster_version` input variable
+  to all three environments with a default of `"1.30"`. The value is set explicitly in
+  each `terraform.tfvars` so it is visible and overridable without touching module code.
+
+- **Provider lock files not committed**
+  (`terraform/.gitignore` already excluded `.terraform.lock.hcl` from ignoring)
+  Without committed lock files, `terraform init` on a fresh CI runner resolves provider
+  versions from scratch and may pull different patch releases, making builds
+  non-reproducible. Added Step 2b to the README setup guide documenting how to generate
+  and commit lock files after the first `terraform init`.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `.gitlab-ci.yml` | Split `build` into `.build-base` + `build:dev/staging/prod`; yq replace sed in `.deploy`; fixed yq path to `.spec.values.image.tag` and target file to `myapp.yaml`; update `needs:` on all deploy jobs; fix stale `CONFIG_REPO_PATH` comment |
+| `infrastructure/sources/karpenter.yaml` | `apiVersion` `v1beta2` → `v1` (consistent with all other sources) |
+| `terraform/environments/dev/terraform.tfvars` | `config_repo_path` placeholder updated to `my-org/amsc-bluebook` |
+| `terraform/environments/staging/terraform.tfvars` | Same |
+| `terraform/environments/prod/terraform.tfvars` | Same |
+| `terraform/environments/dev/variables.tf` | `config_repo_path` description updated to reference this repo |
+| `terraform/environments/staging/variables.tf` | Same |
+| `terraform/environments/prod/variables.tf` | Same |
+| `terraform/environments/dev/platform.tf` | Fix stale section 7 Loki comment; plus earlier changes |
+| `terraform/environments/staging/platform.tf` | Same |
+| `terraform/environments/prod/platform.tf` | Same |
+| `terraform/modules/eks/main.tf` | `deletion_window_in_days` 7→30; `lifecycle.prevent_destroy = true` on KMS key |
+| `terraform/modules/ecr/main.tf` | `deletion_window_in_days` 7→30; `lifecycle.prevent_destroy = true` on KMS key |
+| `terraform/environments/dev/main.tf` | `cluster_version = var.cluster_version` |
+| `terraform/environments/dev/variables.tf` | Add `cluster_version` variable |
+| `terraform/environments/dev/terraform.tfvars` | Add `cluster_version = "1.30"` |
+| `terraform/environments/dev/platform.tf` | `prevent_destroy` on Velero bucket; Velero lifecycle rule; Loki S3 bucket + IRSA; `LOKI_ROLE_ARN`/`LOKI_BUCKET` in cluster-vars |
+| `terraform/environments/staging/main.tf` | `cluster_version = var.cluster_version` |
+| `terraform/environments/staging/variables.tf` | Add `cluster_version` variable |
+| `terraform/environments/staging/terraform.tfvars` | Add `cluster_version = "1.30"` |
+| `terraform/environments/staging/platform.tf` | Same as dev |
+| `terraform/environments/prod/main.tf` | `cluster_version = var.cluster_version` |
+| `terraform/environments/prod/variables.tf` | Add `cluster_version` variable |
+| `terraform/environments/prod/terraform.tfvars` | Add `cluster_version = "1.30"` |
+| `terraform/environments/prod/platform.tf` | Same as dev |
+| `infrastructure/prod/patches/loki-s3.yaml` | New — Loki S3 SimpleScalable patch for prod |
+| `infrastructure/prod/kustomization.yaml` | Add `patches:` block referencing `loki-s3.yaml` |
+| `README.md` | Updated platform table, env differences table, CI pipeline reference, module reference, setup guide; fixed config repo relationship, added Route53 prerequisite, fixed Step 4 variables split by repo (this repo vs app project), fixed Step 4 variable list (added TF_VAR_* sensitive vars, added STAGING/PROD ECR registries), added Loki IRSA to Step 3 bullet list, fixed Step 5 example (v1beta2→v1), fixed day-to-day flow, fixed module table duplicate row; added CI repo split note, corrected yq path in Step 5 comment |
+
+---
+
 ## cl4.002 — Third review pass: deprecations, missing values, housekeeping, LICENSE
 
 ### Errors Fixed

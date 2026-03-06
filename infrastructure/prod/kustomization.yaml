@@ -12,3 +12,10 @@ resources:
   - ../base/kube-prometheus-stack
   - ../base/loki
   - ../base/velero
+
+# Prod-specific overrides applied on top of the base HelmReleases.
+patches:
+  - path: patches/loki-s3.yaml
+    target:
+      kind: HelmRelease
+      name: loki

@@ -198,14 +198,17 @@ module "external_dns_irsa" {
 # No AWS IAM needed — metrics stored in-cluster.
 
 # ── 7. Loki ───────────────────────────────────────────────────────────────────
-# No AWS IAM needed for in-cluster storage.
-# If using S3 as Loki backend, add an IRSA role here similar to Velero below.
+# See section 9 below — Loki S3 bucket and IRSA role are provisioned there.
 
 # ── 8. Velero ─────────────────────────────────────────────────────────────────
 
 resource "aws_s3_bucket" "velero" {
   bucket = "velero-${var.environment}-${data.aws_caller_identity.current.account_id}"
   tags   = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "velero" {
@@ -230,6 +233,19 @@ resource "aws_s3_bucket_public_access_block" "velero" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "velero" {
+  bucket = aws_s3_bucket.velero.id
+
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
 }
 
 module "velero_irsa" {
@@ -271,6 +287,87 @@ module "velero_irsa" {
   tags = local.tags
 }
 
+# ── 9. Loki (S3 backend) ──────────────────────────────────────────────────────
+# Durable log storage that survives pod restarts.
+# The base HelmRelease uses filesystem (dev/staging); the prod kustomize patch
+# switches to this S3 bucket via SimpleScalable mode.
+
+resource "aws_s3_bucket" "loki" {
+  bucket = "loki-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  tags   = local.tags
+
+  lifecycle {
+    prevent_destroy = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "loki" {
+  bucket = aws_s3_bucket.loki.id
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "loki" {
+  bucket = aws_s3_bucket.loki.id
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "aws:kms"
+    }
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "loki" {
+  bucket                  = aws_s3_bucket.loki.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "loki" {
+  bucket = aws_s3_bucket.loki.id
+
+  rule {
+    id     = "expire-noncurrent-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+  }
+}
+
+module "loki_irsa" {
+  source            = "../../modules/irsa"
+  role_name         = "loki-${var.environment}"
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider     = module.eks.oidc_provider
+  namespace         = "monitoring"
+  service_account   = "loki"
+
+  inline_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject", "s3:DeleteObject", "s3:PutObject",
+          "s3:AbortMultipartUpload", "s3:ListMultipartUploadParts",
+        ]
+        Resource = "${aws_s3_bucket.loki.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:ListBucket"]
+        Resource = aws_s3_bucket.loki.arn
+      },
+    ]
+  })
+
+  tags = local.tags
+}
+
 # ── cluster-vars ConfigMap ────────────────────────────────────────────────────
 # Terraform writes all environment-specific values here after creating IAM roles.
 # Flux HelmReleases consume them via `substituteFrom` so no ARNs need to be
@@ -295,6 +392,8 @@ resource "kubernetes_config_map" "cluster_vars" {
     EXTERNAL_DNS_ROLE_ARN     = module.external_dns_irsa.role_arn
     VELERO_ROLE_ARN           = module.velero_irsa.role_arn
     VELERO_BUCKET             = aws_s3_bucket.velero.bucket
+    LOKI_ROLE_ARN             = module.loki_irsa.role_arn
+    LOKI_BUCKET               = aws_s3_bucket.loki.bucket
     LETSENCRYPT_EMAIL         = var.letsencrypt_email
   }
 
