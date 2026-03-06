@@ -161,6 +161,16 @@ Each environment directory contains:
 - A separate GitLab project for your app code (source of Docker builds)
 - A GitLab Runner with Docker-in-Docker support (for image builds)
 
+**Before you deploy, update these placeholders:**
+
+| Placeholder | File | What to set |
+|---|---|---|
+| `config_repo_path = "my-org/amsc-bluebook"` | `terraform/environments/*/terraform.tfvars` | GitLab path to **this** repo (e.g. `john-doe/amsc-bluebook`). Terraform passes it to the Flux provider so Flux knows where to bootstrap. |
+| `gitlab_project_path = "my-org/my-app"` | `terraform/environments/*/terraform.tfvars` | GitLab path to your **app source** repo (e.g. `john-doe/my-api`). Used only to construct the IAM OIDC trust condition — controls which GitLab project is allowed to assume the AWS deploy role. |
+| `myapp/backend` | `.gitlab-ci.yml` | ECR repository name for your app image. Must match an entry in `ecr_repositories` in `terraform.tfvars`. The `build:*` jobs push to `$ECR_REGISTRY/<this-name>:$CI_COMMIT_SHORT_SHA` — update it to match your actual repo name (e.g. `john-doe-api/server`). |
+
+> **Note:** The `build:*` and `deploy:*` jobs in `.gitlab-ci.yml` are provided as a reference template. They are intended to live in your **app repo's** CI pipeline, not this one. Copy the `.build-base`, `.deploy`, and `.aws-auth` blocks into your app project's `.gitlab-ci.yml` and adjust the `docker build` context and image name there.
+
 ---
 
 ## Setup
