@@ -11,3 +11,5 @@ resources:
   - metrics-server.yaml
   - cilium.yaml
   - kong.yaml
+  - mlflow.yaml
+  - openmetadata.yaml

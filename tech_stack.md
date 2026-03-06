@@ -77,7 +77,8 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 |---|---|---|---|
 | Cilium (eBPF networking + Hubble) | 1.15.x | `kube-system` | https://cilium.io |
 | AWS Load Balancer Controller | 1.8.x | `kube-system` | https://kubernetes-sigs.github.io/aws-load-balancer-controller |
-| Kong Gateway OSS (Ingress Controller) | ingress 0.12.x | `kong` | https://docs.konghq.com/kubernetes-ingress-controller |
+| Kong Gateway OSS (Ingress Controller) | ingress 0.22.x | `kong` | https://docs.konghq.com/kubernetes-ingress-controller |
+| kong-openid-connect (community plugin) | latest via luarocks | `kong` | https://github.com/cuongntr/kong-openid-connect-plugin |
 
 ### Autoscaling
 
@@ -109,14 +110,28 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| Velero | 7.x | `velero` | https://velero.io |
-| velero-plugin-for-aws | v1.10.0 | `velero` | https://github.com/vmware-tanzu/velero-plugin-for-aws |
+| Velero | 11.4.x | `velero` | https://velero.io |
+| velero-plugin-for-aws | v1.13.0 | `velero` | https://github.com/vmware-tanzu/velero-plugin-for-aws |
+
+### Data Platform Applications
+
+| Component | Chart Version | Namespace | Reference |
+|---|---|---|---|
+| MLflow | 0.x (community-charts) | `mlflow` | https://mlflow.org |
+| OpenMetadata | 1.x | `openmetadata` | https://open-metadata.org |
+| openmetadata-dependencies (Elasticsearch + MySQL) | 1.x | `openmetadata` | https://helm.open-metadata.org |
+
+### Authentication
+
+| Technology | Reference |
+|---|---|
+| Globus Auth (OIDC identity provider) | https://www.globus.org/platform/services/auth |
 
 ### Secrets Management
 
 | Component | Chart Version | Namespace | Reference |
 |---|---|---|---|
-| External Secrets Operator | 0.9.20 | `external-secrets` | https://external-secrets.io |
+| External Secrets Operator | 2.0.x | `external-secrets` | https://external-secrets.io |
 
 ---
 
@@ -134,6 +149,8 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 | metrics-server | https://kubernetes-sigs.github.io/metrics-server |
 | cilium | https://helm.cilium.io |
 | kong | https://charts.konghq.com |
+| community-charts (MLflow) | https://community-charts.github.io/helm-charts |
+| open-metadata | https://helm.open-metadata.org |
 
 ---
 
@@ -154,6 +171,10 @@ All components are deployed via FluxCD HelmReleases into the EKS cluster.
 | FluxCD | Apache 2.0 |
 | Cilium | Apache 2.0 |
 | Kong Gateway OSS | Apache 2.0 |
+| kong-openid-connect plugin | MIT |
+| MLflow | Apache 2.0 |
+| OpenMetadata | Apache 2.0 |
+| Globus Auth | Commercial (free tier available) |
 | cert-manager | Apache 2.0 |
 | External DNS | Apache 2.0 |
 | Karpenter | Apache 2.0 |

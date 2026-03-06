@@ -2,6 +2,109 @@
 
 ---
 
+## cl4.005 — Data platform applications: MLflow, OpenMetadata, and Globus OIDC via Kong
+
+### New Features
+
+- **Separate `apps/` GitOps tree for application workloads**
+  (`apps/`, `clusters/*/apps.yaml`)
+  All previous Flux Kustomizations pointed at `infrastructure/` only, which mixed
+  platform components with application workloads and had no natural boundary for
+  team-owned apps. A new top-level `apps/` tree is introduced, parallel to
+  `infrastructure/`, with the same `base/` + per-environment overlay structure.
+  Three Flux `Kustomization` resources (`clusters/dev/apps.yaml`,
+  `clusters/staging/apps.yaml`, `clusters/prod/apps.yaml`) point at `apps/<env>/`
+  and declare `dependsOn: infrastructure` so platform components (Kong, cert-manager,
+  external-dns) are always healthy before application reconciliation begins.
+  Teams add their workloads under `apps/base/<app>/` and reference them from the
+  appropriate `apps/<env>/kustomization.yaml`.
+
+- **MLflow** (`apps/base/mlflow/`)
+  MLflow tracking server and model registry deployed via the `community-charts/mlflow`
+  Helm chart. Key configuration:
+  - Artifact store: S3 via IRSA — no static credentials required. The MLflow service
+    account is annotated with `${MLFLOW_ROLE_ARN}` from `cluster-vars`.
+  - Backend store: PostgreSQL (configurable via `${MLFLOW_DB_HOST}` and
+    `${MLFLOW_DB_PASSWORD}`). In-cluster PostgreSQL for dev; RDS recommended for prod.
+  - Auth: none on the MLflow service itself — Kong is the sole ingress point.
+    The `Ingress` is annotated with `konghq.com/plugins: globus-oidc-api` for
+    bearer-token validation at the gateway.
+  - Service type: `ClusterIP` — not directly reachable without going through Kong.
+
+- **OpenMetadata** (`apps/base/openmetadata/`)
+  OpenMetadata data catalog with Elasticsearch and MySQL deployed via the
+  `open-metadata/openmetadata` and `open-metadata/openmetadata-dependencies` Helm
+  charts. Key configuration:
+  - The `openmetadata` HelmRelease declares `dependsOn: openmetadata-dependencies` so
+    Elasticsearch and MySQL are healthy before the server starts.
+  - Authentication: `custom-oidc` provider pointing at Globus Auth
+    (`https://auth.globus.org/.well-known/openid-configuration`). OpenMetadata
+    validates Globus-issued tokens independently — defense in depth alongside Kong.
+  - The `Ingress` is annotated with `konghq.com/plugins: globus-oidc-web` for the
+    full Authorization Code browser flow (redirect to Globus login, session cookie
+    on return).
+  - Airflow disabled in the dependencies chart by default (re-enable for scheduled
+    ingestion pipelines).
+
+- **Globus Auth via kong-openid-connect community plugin**
+  (`infrastructure/base/kong/globus-jwt-plugin.yaml`, `docker/kong/Dockerfile`)
+  The previous `KongClusterPlugin` using the built-in `jwt` plugin (which required
+  manually pre-populating Globus public keys and did not support the OIDC Authorization
+  Code flow) has been replaced with the community
+  [kong-openid-connect](https://github.com/cuongntr/kong-openid-connect-plugin) plugin.
+
+  Two `KongClusterPlugin` resources are provisioned to cover both access patterns:
+
+  | Plugin | `bearer_only` | Purpose |
+  |---|---|---|
+  | `globus-oidc-api` | `yes` | Headless clients: MLflow SDK, notebooks, scripts |
+  | `globus-oidc-web` | `no` | Browser UIs: OpenMetadata (Authorization Code flow) |
+
+  The plugin is a custom Lua plugin that must be installed into the Kong container.
+  `docker/kong/Dockerfile` extends `kong:3.9` and installs
+  `lua-resty-http`, `lua-resty-session`, `lua-resty-openidc`, and
+  `kong-openid-connect` via `luarocks`. The built image is pushed to ECR and
+  referenced in the Kong HelmRelease via `${KONG_IMAGE_REPOSITORY}` and
+  `${KONG_IMAGE_TAG}` from `cluster-vars`.
+
+  `KONG_PLUGINS=bundled,kong-openid-connect` is set in `gateway.env` so Kong
+  registers the plugin at startup.
+
+  `${GLOBUS_CLIENT_ID}` and `${GLOBUS_CLIENT_SECRET}` are injected from
+  `cluster-secrets` via Flux `substituteFrom`.
+
+- **New HelmRepository sources**
+  (`infrastructure/sources/mlflow.yaml`, `infrastructure/sources/openmetadata.yaml`)
+  - `community-charts`: `https://community-charts.github.io/helm-charts` (MLflow)
+  - `open-metadata`: `https://helm.open-metadata.org` (OpenMetadata + dependencies)
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `docker/kong/Dockerfile` | New — custom Kong image with kong-openid-connect plugin |
+| `infrastructure/sources/mlflow.yaml` | New — community-charts HelmRepository |
+| `infrastructure/sources/openmetadata.yaml` | New — open-metadata HelmRepository |
+| `infrastructure/sources/kustomization.yaml` | Added `mlflow.yaml` and `openmetadata.yaml` |
+| `infrastructure/base/kong/globus-jwt-plugin.yaml` | Replaced jwt plugin with two KongClusterPlugin resources using kong-openid-connect |
+| `infrastructure/base/kong/helmrelease.yaml` | Custom image reference (`${KONG_IMAGE_REPOSITORY}:${KONG_IMAGE_TAG}`); `gateway.env.plugins: bundled,kong-openid-connect` |
+| `infrastructure/base/kong/kustomization.yaml` | Added `globus-jwt-plugin.yaml` |
+| `apps/base/mlflow/kustomization.yaml` | New |
+| `apps/base/mlflow/helmrelease.yaml` | New — MLflow HelmRelease |
+| `apps/base/openmetadata/kustomization.yaml` | New |
+| `apps/base/openmetadata/dependencies-helmrelease.yaml` | New — Elasticsearch + MySQL |
+| `apps/base/openmetadata/helmrelease.yaml` | New — OpenMetadata server with Globus OIDC |
+| `apps/dev/kustomization.yaml` | New |
+| `apps/staging/kustomization.yaml` | New |
+| `apps/prod/kustomization.yaml` | New |
+| `clusters/dev/apps.yaml` | New — Flux Kustomization for apps/dev, dependsOn infrastructure |
+| `clusters/staging/apps.yaml` | New |
+| `clusters/prod/apps.yaml` | New |
+| `README.md` | Architecture diagram, repo structure, Kong/Globus sections, Step 2 sensitive vars, Step 4 variables tables, Steps 5/6 rewritten, Day-to-Day deploy paths updated, CI pipeline reference path updated, Adding a New Application updated, Scaling section updated |
+| `tech_stack.md` | Kong version corrected; kong-openid-connect plugin added; MLflow, OpenMetadata, Globus Auth added; Data Platform Applications section added; community-charts and open-metadata Helm repos added; ESO and Velero versions corrected; license entries added |
+
+---
+
 ## cl4.004 — Third audit pass: documentation gap fixed
 
 ### Documentation

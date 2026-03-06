@@ -31,7 +31,17 @@ spec:
         limits:
           memory: 256Mi
 
+    # Custom Kong image with the kong-openid-connect community plugin pre-installed.
+    # Build docker/kong/Dockerfile, push to ECR, and set KONG_IMAGE_REPOSITORY +
+    # KONG_IMAGE_TAG in cluster-vars. See docker/kong/Dockerfile for build details.
+    image:
+      repository: "${KONG_IMAGE_REPOSITORY}"
+      tag: "${KONG_IMAGE_TAG}"
+
     gateway:
+      # Register the community OIDC plugin alongside the built-in plugin set.
+      env:
+        plugins: bundled,kong-openid-connect
       # Kong proxy sits behind an AWS Network Load Balancer.
       # Kong handles L7 routing, rate limiting, auth plugins, and request transforms.
       replicaCount: 2

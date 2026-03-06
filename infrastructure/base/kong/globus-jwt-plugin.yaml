@@ -1,0 +1,59 @@
+---
+# Two KongClusterPlugin resources covering the two access patterns on this platform:
+#
+#   globus-oidc-api  — bearer_only: true
+#     For headless API clients (MLflow SDK, scripts, notebooks).
+#     Clients obtain a Globus token externally (globus-sdk / Globus CLI) and pass it
+#     as Authorization: Bearer <token>. No browser redirect is performed.
+#
+#   globus-oidc-web  — bearer_only: false
+#     For browser-facing UIs (OpenMetadata).
+#     Unauthenticated requests are redirected to Globus Auth for login, then the
+#     Authorization Code flow completes and a session cookie is set.
+#
+# Both plugins are cluster-scoped so any namespace can opt in by annotating an
+# Ingress with: konghq.com/plugins: globus-oidc-api
+#                             or: konghq.com/plugins: globus-oidc-web
+#
+# Plugin source: https://github.com/cuongntr/kong-openid-connect-plugin
+# This plugin must be pre-installed in the Kong image — see docker/kong/Dockerfile.
+# ${GLOBUS_CLIENT_ID} and ${GLOBUS_CLIENT_SECRET} come from cluster-secrets via
+# Flux substituteFrom.
+
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: globus-oidc-api
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: kong-openid-connect
+config:
+  client_id: "${GLOBUS_CLIENT_ID}"
+  client_secret: "${GLOBUS_CLIENT_SECRET}"
+  discovery: "https://auth.globus.org/.well-known/openid-configuration"
+  # bearer_only: true — validate the Bearer token in the Authorization header.
+  # Returns 401 for unauthenticated requests; no browser redirect.
+  bearer_only: "yes"
+  # Inject user identity headers into upstream requests so apps can identify callers.
+  # X-Userinfo contains the full ID token claims (sub, email, name, groups).
+  introspection_endpoint_auth_method: client_secret_post
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: globus-oidc-web
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: kong-openid-connect
+config:
+  client_id: "${GLOBUS_CLIENT_ID}"
+  client_secret: "${GLOBUS_CLIENT_SECRET}"
+  discovery: "https://auth.globus.org/.well-known/openid-configuration"
+  # bearer_only: false — full Authorization Code flow for browser users.
+  # Unauthenticated requests are redirected to Globus login; a session cookie
+  # is set after the callback so subsequent requests are served without re-auth.
+  bearer_only: "no"
+  # Session storage: cookie is the simplest default (no Redis dependency).
+  # For HA / multi-replica Kong, switch to redis and provision a Redis instance.
+  session_storage: cookie
+  introspection_endpoint_auth_method: client_secret_post

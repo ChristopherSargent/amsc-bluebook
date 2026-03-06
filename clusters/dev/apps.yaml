@@ -1,0 +1,22 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: apps
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./apps/dev
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: flux-system
+  # Apps depend on infrastructure being healthy first (Kong, cert-manager, etc.)
+  dependsOn:
+    - name: infrastructure
+  postBuild:
+    substituteFrom:
+      - kind: ConfigMap
+        name: cluster-vars
+      - kind: Secret
+        name: cluster-secrets
+        optional: true

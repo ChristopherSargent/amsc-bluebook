@@ -1,0 +1,80 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openmetadata
+  namespace: openmetadata
+spec:
+  interval: 10m
+  timeout: 15m
+  # Dependencies must be healthy before OpenMetadata server starts.
+  dependsOn:
+    - name: openmetadata-dependencies
+      namespace: openmetadata
+  chart:
+    spec:
+      chart: openmetadata
+      version: "1.*"
+      sourceRef:
+        kind: HelmRepository
+        name: open-metadata
+        namespace: flux-system
+  values:
+    openmetadata:
+      config:
+        # Globus Auth as the OIDC provider.
+        # OpenMetadata validates tokens independently of Kong — defense in depth.
+        # ${GLOBUS_CLIENT_ID} comes from cluster-secrets via Flux substituteFrom.
+        authentication:
+          provider: custom-oidc
+          publicKeyUrls:
+            - "https://auth.globus.org/jwk.json"
+          authority: "https://auth.globus.org"
+          clientId: "${GLOBUS_CLIENT_ID}"
+          callbackUrl: "https://${OPENMETADATA_HOST}/callback"
+
+        # JWT used internally by OpenMetadata for service-to-service calls.
+        # ${OPENMETADATA_JWT_SECRET} comes from cluster-secrets.
+        jwtTokenConfiguration:
+          jwtissuer: "open-metadata.org"
+          keyId: "Gb389A-9f76-gdjs-a92j-0242bk94356"
+          rsapublicKeyFilePath: ""
+          rsaprivateKeyFilePath: ""
+          jwtTokenExpiryTime: "3600"
+
+        database:
+          host: openmetadata-dependencies-mysql
+          port: 3306
+          driverClass: com.mysql.cj.jdbc.Driver
+          dbScheme: mysql
+          dbUseSSL: false
+          databaseName: openmetadata_db
+
+        elasticsearch:
+          host: openmetadata-dependencies-elasticsearch-master
+          port: 9200
+          scheme: http
+
+    # Ingress managed by Kong Ingress Controller.
+    # konghq.com/plugins opts this route into Globus JWT validation at the gateway.
+    ingress:
+      enabled: true
+      ingressClassName: kong
+      annotations:
+        konghq.com/plugins: globus-oidc-web
+        cert-manager.io/cluster-issuer: letsencrypt
+      hosts:
+        - host: "${OPENMETADATA_HOST}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: openmetadata-tls
+          hosts:
+            - "${OPENMETADATA_HOST}"
+
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        memory: 2Gi

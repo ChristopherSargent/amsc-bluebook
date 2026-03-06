@@ -1,0 +1,72 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: mlflow
+  namespace: mlflow
+spec:
+  interval: 10m
+  install:
+    createNamespace: true
+  chart:
+    spec:
+      chart: mlflow
+      version: "0.*"
+      sourceRef:
+        kind: HelmRepository
+        name: community-charts
+        namespace: flux-system
+  values:
+    # Backend store: PostgreSQL. For dev an in-cluster instance is fine;
+    # for prod point ${MLFLOW_DB_HOST} at an RDS endpoint via cluster-vars.
+    backendStore:
+      databaseConnectionCheck: true
+      postgres:
+        enabled: true
+        host: "${MLFLOW_DB_HOST}"
+        port: 5432
+        database: mlflow
+        user: mlflow
+        password: "${MLFLOW_DB_PASSWORD}"
+
+    # Artifact store: S3 via IRSA — no static credentials needed.
+    artifactRoot:
+      s3:
+        enabled: true
+        bucket: "${MLFLOW_ARTIFACT_BUCKET}"
+        path: "/"
+
+    # IRSA annotation wires the pod to the IAM role created by terraform/modules/irsa.
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: "${MLFLOW_ROLE_ARN}"
+
+    service:
+      # ClusterIP only — Kong is the sole ingress; MLflow itself has no auth.
+      type: ClusterIP
+      port: 5000
+
+    # Ingress managed by Kong Ingress Controller.
+    # konghq.com/plugins annotation opts this route into Globus JWT validation.
+    ingress:
+      enabled: true
+      ingressClassName: kong
+      annotations:
+        konghq.com/plugins: globus-oidc-api
+        cert-manager.io/cluster-issuer: letsencrypt
+      hosts:
+        - host: "${MLFLOW_HOST}"
+          paths:
+            - path: /
+              pathType: Prefix
+      tls:
+        - secretName: mlflow-tls
+          hosts:
+            - "${MLFLOW_HOST}"
+
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 512Mi

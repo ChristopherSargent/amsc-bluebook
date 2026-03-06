@@ -39,7 +39,7 @@ Per AWS Account:
   ├── kube-system         AWS Load Balancer Controller (ALB/NLB provisioning)
   ├── kube-system         Karpenter (node autoscaling)
   ├── kube-system         Metrics Server (HPA support)
-  ├── kong                Kong Gateway OSS (API gateway, L7 routing, rate limiting)
+  ├── kong                Kong Gateway OSS + kong-openid-connect plugin (Globus Auth)
   ├── cert-manager        cert-manager (TLS via Let's Encrypt DNS-01)
   ├── external-dns        External DNS (Route53 automation)
   ├── monitoring          kube-prometheus-stack (Prometheus + Grafana + Alertmanager)
@@ -47,10 +47,13 @@ Per AWS Account:
   ├── velero              Velero (cluster backup to S3)
   ├── flux-system         FluxCD controllers
   ├── external-secrets    ECR token refresh via IRSA
-  └── <your-app-ns>       Application workloads
+  ├── mlflow              MLflow (ML experiment tracking, model registry — S3 artifacts via IRSA)
+  ├── openmetadata        OpenMetadata (data catalog, lineage, governance)
+  └── <team-app-ns>       Additional team application workloads
 
   ECR Registry
-  └── per-app repositories (created by Terraform)
+  ├── per-app repositories (created by Terraform)
+  └── kong-custom         Custom Kong image with OIDC plugin pre-installed
 ```
 
 **Key properties:**
@@ -71,7 +74,7 @@ Per AWS Account:
 | AWS Load Balancer Controller | `kube-system` | Provisions ALBs/NLBs from Ingress resources | Yes (IRSA) |
 | Karpenter | `kube-system` | Node autoscaling with spot interruption handling | Yes (IRSA) |
 | Metrics Server | `kube-system` | Provides CPU/memory metrics for HPA | No |
-| Kong Gateway OSS | `kong` | API gateway: L7 routing, rate limiting, auth plugins | No |
+| Kong Gateway OSS + kong-openid-connect | `kong` | API gateway: L7 routing, rate limiting, Globus OIDC auth | No |
 | cert-manager | `cert-manager` | Automatic TLS certificates via Let's Encrypt DNS-01 | Yes (IRSA) |
 | External DNS | `external-dns` | Syncs Route53 records from Kubernetes Services/Ingresses | Yes (IRSA) |
 | kube-prometheus-stack | `monitoring` | Prometheus, Grafana, Alertmanager | No |
@@ -86,6 +89,9 @@ Per AWS Account:
 ```
 .
 ├── .gitlab-ci.yml                  CI/CD pipeline
+├── docker/
+│   └── kong/
+│       └── Dockerfile              Custom Kong image with kong-openid-connect plugin
 ├── terraform/
 │   ├── bootstrap/
 │   │   └── main.tf                 Creates S3 state bucket + DynamoDB lock table
@@ -98,31 +104,47 @@ Per AWS Account:
 │       ├── staging/                Staging account: same structure, larger nodes, HA NAT
 │       └── prod/                   Prod account: same structure, tag-only deploys
 ├── clusters/
-│   ├── dev/infrastructure.yaml     Flux Kustomization — points at infrastructure/dev
-│   ├── staging/infrastructure.yaml
-│   └── prod/infrastructure.yaml
-└── infrastructure/
-    ├── sources/                    HelmRepository sources (one file per upstream)
-    ├── base/                       HelmRelease base configs (10 components)
-    │   ├── cilium/
-    │   ├── aws-load-balancer-controller/
-    │   ├── kong/
-    │   ├── karpenter/
-    │   ├── metrics-server/
-    │   ├── cert-manager/
-    │   ├── external-dns/
-    │   ├── kube-prometheus-stack/
-    │   ├── loki/
-    │   └── velero/
+│   ├── dev/
+│   │   ├── infrastructure.yaml     Flux Kustomization — points at infrastructure/dev
+│   │   └── apps.yaml               Flux Kustomization — points at apps/dev, dependsOn infrastructure
+│   ├── staging/
+│   │   ├── infrastructure.yaml
+│   │   └── apps.yaml
+│   └── prod/
+│       ├── infrastructure.yaml
+│       └── apps.yaml
+├── infrastructure/
+│   ├── sources/                    HelmRepository sources (one file per upstream)
+│   ├── base/                       HelmRelease base configs (platform components)
+│   │   ├── cilium/
+│   │   ├── aws-load-balancer-controller/
+│   │   ├── kong/                   Includes globus-jwt-plugin.yaml (KongClusterPlugin CRDs)
+│   │   ├── karpenter/
+│   │   ├── metrics-server/
+│   │   ├── cert-manager/
+│   │   ├── external-dns/
+│   │   ├── kube-prometheus-stack/
+│   │   ├── loki/
+│   │   └── velero/
+│   ├── dev/
+│   │   └── kustomization.yaml      Flux reconciliation target for dev (base, filesystem Loki)
+│   ├── staging/
+│   │   └── kustomization.yaml      Flux reconciliation target for staging (base, filesystem Loki)
+│   └── prod/
+│       ├── kustomization.yaml      Flux reconciliation target for prod (base + patches)
+│       └── patches/
+│           ├── loki-s3.yaml        Overrides Loki to S3-backed SimpleScalable mode
+│           └── promtail.yaml       Redirects Promtail push URL to loki-gateway (SimpleScalable)
+└── apps/
+    ├── base/                       HelmRelease base configs (application workloads)
+    │   ├── mlflow/                 MLflow tracking server (S3 artifacts, PostgreSQL backend)
+    │   └── openmetadata/           OpenMetadata + dependencies (Elasticsearch, MySQL)
     ├── dev/
-    │   └── kustomization.yaml      Flux reconciliation target for dev (base, filesystem Loki)
+    │   └── kustomization.yaml      Includes base apps for dev (add env-specific patches here)
     ├── staging/
-    │   └── kustomization.yaml      Flux reconciliation target for staging (base, filesystem Loki)
+    │   └── kustomization.yaml
     └── prod/
-        ├── kustomization.yaml      Flux reconciliation target for prod (base + patches)
-        └── patches/
-            ├── loki-s3.yaml        Overrides Loki to S3-backed SimpleScalable mode
-            └── promtail.yaml       Redirects Promtail push URL to loki-gateway (SimpleScalable)
+        └── kustomization.yaml
 ```
 
 Each environment directory contains:
@@ -252,9 +274,15 @@ Use `/32` for a single host, a wider prefix (e.g. `/24`) for a DHCP pool or VPN 
 ```bash
 export TF_VAR_gitlab_flux_token="<gitlab-deploy-token-with-read_repository-scope>"
 export TF_VAR_grafana_admin_password="<initial-grafana-password>"
+export TF_VAR_globus_client_id="<globus-auth-client-id>"
+export TF_VAR_globus_client_secret="<globus-auth-client-secret>"
+export TF_VAR_mlflow_db_password="<postgresql-password-for-mlflow>"
+export TF_VAR_openmetadata_jwt_secret="<random-secret-for-openmetadata-jwt-signing>"
 ```
 
-Create the deploy token in GitLab under **this repo**: **Settings > Repository > Deploy tokens**. Grant `read_repository` scope only.
+Create the GitLab deploy token under **this repo**: **Settings > Repository > Deploy tokens**. Grant `read_repository` scope only.
+
+Register a Globus Auth application at [app.globus.org/settings/developers](https://app.globus.org/settings/developers) to obtain the client ID and secret. Set the redirect URI to `https://<OPENMETADATA_HOST>/callback`.
 
 ### Step 3 — Apply Terraform
 
@@ -354,91 +382,52 @@ The Terraform jobs run in **this repo's** CI pipeline; the build/deploy jobs run
 | `CONFIG_REPO_PATH` | GitLab path to this repo (e.g. `my-org/amsc-bluebook`) | All |
 | `CONFIG_REPO_TOKEN` | GitLab access token with `write_repository` scope on this repo | All (masked) |
 
-### Step 5 — Add your application manifests
+### Step 5 — Deploy the data platform applications (MLflow + OpenMetadata)
 
-This repo is the Flux config repo. Flux was bootstrapped into it in Step 3 and already watches `clusters/<env>/` and `infrastructure/`. The platform components (Cilium, Kong, cert-manager, etc.) reconcile automatically.
+The `apps/` tree is already wired into Flux via `clusters/<env>/apps.yaml`, which has `dependsOn: infrastructure` so it only reconciles after Kong, cert-manager, and external-dns are healthy.
 
-To deploy your application, add manifests under `clusters/<env>/apps/` in this repo:
+Before Flux can reconcile the apps, add the required variables to Terraform `platform.tf` for each environment and re-apply:
 
-```
-clusters/
-├── dev/
-│   ├── flux-system/          # created automatically by Flux bootstrap — do not edit
-│   ├── infrastructure.yaml   # already present — reconciles infrastructure/dev/
-│   └── apps/
-│       ├── namespace.yaml    # your app namespace
-│       └── myapp.yaml        # your app HelmRelease
-├── staging/
-│   └── apps/
-└── prod/
-    └── apps/
-```
+```hcl
+# In cluster-vars ConfigMap (non-sensitive):
+"KONG_IMAGE_REPOSITORY" = "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/kong-custom"
+"KONG_IMAGE_TAG"         = "3.9.0"
+"MLFLOW_ARTIFACT_BUCKET" = aws_s3_bucket.mlflow.id
+"MLFLOW_ROLE_ARN"        = module.irsa_mlflow.role_arn
+"MLFLOW_DB_HOST"         = "<rds-or-in-cluster-postgres-host>"
+"MLFLOW_HOST"            = "mlflow.dev.your-domain.com"
+"OPENMETADATA_HOST"      = "openmetadata.dev.your-domain.com"
 
-Example `clusters/dev/apps/namespace.yaml`:
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: myapp
+# In cluster-secrets Secret (sensitive):
+"GLOBUS_CLIENT_ID"       = var.globus_client_id
+"GLOBUS_CLIENT_SECRET"   = var.globus_client_secret
+"MLFLOW_DB_PASSWORD"     = var.mlflow_db_password
+"OPENMETADATA_JWT_SECRET" = var.openmetadata_jwt_secret
 ```
 
-Example `clusters/dev/apps/myapp.yaml`:
+Build and push the custom Kong image once per account before deploying:
 
-```yaml
-apiVersion: source.toolkit.fluxcd.io/v1
-kind: HelmRepository
-metadata:
-  name: myapp
-  namespace: flux-system
-spec:
-  type: oci
-  interval: 5m
-  url: oci://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/charts
----
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  name: myapp
-  namespace: myapp
-spec:
-  interval: 5m
-  chart:
-    spec:
-      chart: myapp
-      version: "1.x"
-      sourceRef:
-        kind: HelmRepository
-        name: myapp
-  values:
-    image:
-      repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/myapp/backend
-      tag: "abc1234"   # deploy:dev bumps this via: yq -i ".spec.values.image.tag = ..."
+```bash
+cd docker/kong
+docker build -t <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/kong-custom:3.9.0 .
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/kong-custom:3.9.0
 ```
 
-> **Helm chart prerequisite:** The HelmRepository above expects your Helm chart packaged as an OCI artifact at `oci://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/charts/myapp`. This is separate from the Docker image push done by `build:dev`. Add a `helm package` + `helm push` step to your app's CI pipeline to publish the chart to ECR. Alternatively, point the HelmRepository at a public chart registry (e.g. Bitnami, Artifact Hub) and override only the `image.tag` in `values:` — the deploy job works the same either way.
+### Step 6 — Add your own application manifests
 
-You also need a Kustomization in `clusters/<env>/` that tells Flux to reconcile the `apps/` directory:
+To deploy a team application, add it to the `apps/` tree:
 
-```yaml
-# clusters/dev/apps.yaml
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
-metadata:
-  name: apps
-  namespace: flux-system
-spec:
-  interval: 5m
-  path: ./clusters/dev/apps
-  prune: true
-  sourceRef:
-    kind: GitRepository
-    name: flux-system
-  postBuild:
-    substituteFrom:
-      - kind: ConfigMap
-        name: cluster-vars
 ```
+apps/
+└── base/
+    └── your-app/
+        ├── kustomization.yaml
+        └── helmrelease.yaml      # annotate Ingress with konghq.com/plugins: globus-oidc-api
+```
+
+Then add `../base/your-app` to `apps/dev/kustomization.yaml` (and staging/prod when ready). A `clusters/<env>/apps.yaml` Flux Kustomization already exists — no new cluster-level files are needed.
+
+> **Helm chart prerequisite:** The HelmRepository expects your Helm chart packaged as an OCI artifact at `oci://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/charts/myapp`. Add a `helm package` + `helm push` step to your app's CI pipeline to publish the chart to ECR. Alternatively, point the HelmRepository at a public chart registry (e.g. Bitnami, Artifact Hub) and override only the `image.tag` in `values:`.
 
 ---
 
@@ -453,21 +442,21 @@ Developer merges PR to main
 GitLab CI pipeline runs (build:dev + deploy:dev, automatic):
   1. build:dev assumes DEV_TF_ROLE_ARN via OIDC
   2. Builds Docker image, pushes to dev account ECR
-  3. deploy:dev bumps .spec.values.image.tag in clusters/dev/apps/myapp.yaml (app repo CI)
+  3. deploy:dev bumps .spec.values.image.tag in apps/base/<your-app>/helmrelease.yaml (app repo CI)
         |
         v
 FluxCD in dev cluster detects change in this repo
-  4. Pulls updated HelmRelease
+  4. Pulls updated HelmRelease (via apps/dev/kustomization.yaml → apps/base/<your-app>/)
   5. Upgrades the Helm release in-cluster
   6. Pod pulls new image from dev ECR (node role has ECR read access)
         |
         v
 Developer manually triggers build:staging + deploy:staging in GitLab
-  (build:staging pushes to staging account ECR, deploy:staging bumps clusters/staging/apps/)
+  (build:staging pushes to staging account ECR, deploy:staging bumps apps/base/<your-app>/helmrelease.yaml)
         |
         v
 Release tag created → build:prod + deploy:prod available (both manual)
-  (build:prod pushes to prod account ECR, deploy:prod bumps clusters/prod/apps/)
+  (build:prod pushes to prod account ECR, deploy:prod bumps apps/base/<your-app>/helmrelease.yaml)
 ```
 
 ---
@@ -553,7 +542,7 @@ The `.gitlab-ci.yml` pipeline has five stages:
 
 Each `build:<env>` job assumes the corresponding account's IAM role and pushes directly to that account's ECR registry — no cross-account ECR access required. `deploy:<env>` gates on `build:<env>` completing first.
 
-> **CI pipeline split:** The Terraform jobs (`tf:validate`, `tf:plan:*`, `tf:apply:*`) belong in **this repo's** `.gitlab-ci.yml` and are already configured. The `build:*` and `deploy:*` jobs are intended for your **application repo's** CI pipeline — copy the `.build-base` and `.deploy` templates (and the `.aws-auth` helper) into the app project's `.gitlab-ci.yml`, adjusting `docker build` context and `yq` path (`clusters/${DEPLOY_ENV}/apps/myapp.yaml`) as needed. Set all the variables listed below in the app repo's CI/CD settings.
+> **CI pipeline split:** The Terraform jobs (`tf:validate`, `tf:plan:*`, `tf:apply:*`) belong in **this repo's** `.gitlab-ci.yml` and are already configured. The `build:*` and `deploy:*` jobs are intended for your **application repo's** CI pipeline — copy the `.build-base` and `.deploy` templates (and the `.aws-auth` helper) into the app project's `.gitlab-ci.yml`, adjusting `docker build` context and `yq` path (`apps/base/<your-app>/helmrelease.yaml`) as needed. Set all the variables listed below in the app repo's CI/CD settings.
 
 > **Required customization:** The `build:*` jobs in `.gitlab-ci.yml` contain `myapp/backend` as a placeholder image name. Replace every occurrence with your actual ECR repository name (e.g. `yourapp/api`) before the pipeline will push to the correct repository.
 
@@ -571,6 +560,20 @@ Each `build:<env>` job assumes the corresponding account's IAM role and pushes d
 | `CONFIG_REPO_TOKEN` | Token with `write_repository` on this repo | App repo | Yes (mask) |
 | `TF_VAR_gitlab_flux_token` | GitLab deploy token for Flux (read-only on this repo) | This repo | Yes (mask) |
 | `TF_VAR_grafana_admin_password` | Initial Grafana admin password | This repo | Yes (mask) |
+| `TF_VAR_globus_client_id` | Globus Auth application client ID | This repo | Yes (mask) |
+| `TF_VAR_globus_client_secret` | Globus Auth application client secret | This repo | Yes (mask) |
+
+**Additional `cluster-vars` ConfigMap entries** (added to Terraform `platform.tf` alongside existing ARNs):
+
+| Key | Description |
+|---|---|
+| `KONG_IMAGE_REPOSITORY` | ECR URL for the custom Kong image (e.g. `123456789012.dkr.ecr.us-east-1.amazonaws.com/kong-custom`) |
+| `KONG_IMAGE_TAG` | Tag of the built Kong image (e.g. `3.9.0`) |
+| `MLFLOW_ARTIFACT_BUCKET` | S3 bucket name for MLflow experiment artifacts |
+| `MLFLOW_ROLE_ARN` | IRSA role ARN for MLflow S3 access |
+| `MLFLOW_DB_HOST` | PostgreSQL host for MLflow backend store |
+| `MLFLOW_HOST` | DNS hostname for MLflow ingress (e.g. `mlflow.dev.your-domain.com`) |
+| `OPENMETADATA_HOST` | DNS hostname for OpenMetadata ingress |
 
 ---
 
@@ -592,28 +595,61 @@ Cilium runs in **CNI chaining mode** alongside the AWS VPC CNI. VPC CNI handles 
 Kong sits in front of your application services and handles cross-cutting API concerns:
 
 - **Rate limiting** — per-consumer or per-IP, configured via `KongPlugin` CRD
-- **Authentication** — JWT validation, API key, OAuth2, OIDC — without touching app code
+- **Authentication** — Globus OIDC via `kong-openid-connect` community plugin
 - **Request routing** — path-based, header-based, host-based via `KongRoute` CRD
 - **Observability** — per-route request metrics and logs
 
 **Traffic flow:**
 ```
 Internet → AWS NLB → Kong proxy (kong namespace)
+                        |-- globus-oidc-api plugin (Bearer token, headless clients)
+                        |-- globus-oidc-web plugin (Authorization Code flow, browser UIs)
                         |-- routes to Services via KongRoute
-                        |-- applies plugins (rate limit, auth, etc.)
                         └── Service → Pod
 ```
 
 Kong is fully open source (Apache 2.0). The management GUI (Kong Manager) and some enterprise plugins require a paid Kong Enterprise license, but all routing and plugin capabilities used here are in the OSS version.
+
+### Globus Authentication
+
+This platform uses [Globus Auth](https://www.globus.org/platform/services/auth) as the OIDC identity provider via the community [kong-openid-connect](https://github.com/cuongntr/kong-openid-connect-plugin) plugin installed into a custom Kong image (`docker/kong/Dockerfile`).
+
+Two `KongClusterPlugin` resources are provisioned in `infrastructure/base/kong/globus-jwt-plugin.yaml`:
+
+| Plugin name | `bearer_only` | Use for |
+|---|---|---|
+| `globus-oidc-api` | `yes` | Headless API clients — MLflow SDK, notebooks, scripts |
+| `globus-oidc-web` | `no` | Browser UIs — OpenMetadata, Grafana (future) |
+
+Any team app can opt into Globus auth by adding the annotation to its `Ingress`:
+
+```yaml
+annotations:
+  konghq.com/plugins: globus-oidc-api   # or globus-oidc-web for browser UIs
+```
+
+**Prerequisites before deploying Kong:**
+
+1. Register an application in [Globus Developers](https://app.globus.org/settings/developers) and obtain a `client_id` and `client_secret`.
+2. Add `${KONG_IMAGE_REPOSITORY}` (ECR URL) and `${KONG_IMAGE_TAG}` to `cluster-vars`.
+3. Add `${GLOBUS_CLIENT_ID}` and `${GLOBUS_CLIENT_SECRET}` to `cluster-secrets`.
+4. Build and push the custom Kong image to ECR:
+
+```bash
+cd docker/kong
+docker build -t <ECR_REGISTRY>/kong-custom:3.9.0 .
+docker push <ECR_REGISTRY>/kong-custom:3.9.0
+```
 
 ---
 
 ## Adding a New Application
 
 1. Add the repository names to `ecr_repositories` in each environment's `terraform.tfvars` and re-apply Terraform.
-2. Add a `HelmRelease` manifest under `clusters/<env>/apps/` in the config repo.
-3. Add a `KongRoute` and `KongService` manifest to expose the app through the Kong gateway.
-4. Add `build:<env>` jobs (extending `.build-base`) and `deploy:<env>` jobs to `.gitlab-ci.yml` for the new app, one set per account.
+2. Add a `HelmRelease` (and any supporting manifests) under `apps/base/<your-app>/`.
+3. Add `../base/<your-app>` to each `apps/<env>/kustomization.yaml` that should run it.
+4. Annotate the app's `Ingress` with `konghq.com/plugins: globus-oidc-api` (headless API) or `konghq.com/plugins: globus-oidc-web` (browser UI) to enforce Globus authentication at the gateway.
+5. Add `build:<env>` jobs (extending `.build-base`) and `deploy:<env>` jobs to `.gitlab-ci.yml` for the new app, one set per account.
 
 ---
 
@@ -627,4 +663,6 @@ To add a new environment (e.g., `sandbox`):
 4. Run `terraform apply` in the new environment directory
 5. Add the role ARN and ECR registry outputs as GitLab CI variables
 6. Add `tf:plan:sandbox`, `tf:apply:sandbox`, `build:sandbox` (extending `.build-base`), and `deploy:sandbox` jobs to `.gitlab-ci.yml`
-7. Create `clusters/sandbox/` in the config repo
+7. Create `clusters/sandbox/infrastructure.yaml` and `clusters/sandbox/apps.yaml` pointing at `infrastructure/sandbox` and `apps/sandbox` respectively
+8. Create `infrastructure/sandbox/kustomization.yaml` (copy from `infrastructure/dev/`)
+9. Create `apps/sandbox/kustomization.yaml` (copy from `apps/dev/`)
