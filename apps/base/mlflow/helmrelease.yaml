@@ -53,7 +53,7 @@ spec:
       ingressClassName: kong
       annotations:
         konghq.com/plugins: globus-oidc-api
-        cert-manager.io/cluster-issuer: letsencrypt
+        cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
         - host: "${MLFLOW_HOST}"
           paths:

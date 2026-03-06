@@ -61,7 +61,7 @@ spec:
       ingressClassName: kong
       annotations:
         konghq.com/plugins: globus-oidc-web
-        cert-manager.io/cluster-issuer: letsencrypt
+        cert-manager.io/cluster-issuer: letsencrypt-prod
       hosts:
         - host: "${OPENMETADATA_HOST}"
           paths:
