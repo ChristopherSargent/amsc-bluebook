@@ -6,6 +6,22 @@
 
 ### Bug Fixes
 
+- **Karpenter IRSA not created — wrong input variable name on karpenter submodule**
+  (`terraform/environments/*/platform.tf`)
+  The karpenter submodule (`terraform-aws-modules/eks/aws//modules/karpenter` v20) uses
+  `oidc_provider_arn` as the OIDC provider input. The code passed `irsa_oidc_provider_arn`,
+  which does not exist in v20 and causes an immediate Terraform error:
+  "An argument named 'irsa_oidc_provider_arn' is not expected here."
+  This prevented `terraform apply` from completing in all three environments.
+  Fixed: renamed to `oidc_provider_arn` in all three platform files.
+
+- **CI Terraform cache key was empty for plan/validate jobs**
+  (`.gitlab-ci.yml`)
+  The `.terraform` base template used `key: terraform-${CI_ENVIRONMENT_NAME}` for caching.
+  `CI_ENVIRONMENT_NAME` is only set when a job declares `environment:`, which only the
+  `apply` jobs do — plan and validate jobs resolved to an empty cache key.
+  Fixed: changed to `key: terraform-${ENV}`, which is set via `variables:` in every job.
+
 - **CI deploy job corrupted YAML with `sed`; `yq` path targeted wrong YAML level**
   (`.gitlab-ci.yml`)
   `sed -i "s|tag:.*|tag: ${CI_COMMIT_SHORT_SHA}|"` had two bugs: it matched any YAML
@@ -98,7 +114,7 @@
 
 | File | Change |
 |---|---|
-| `.gitlab-ci.yml` | Split `build` into `.build-base` + `build:dev/staging/prod`; yq replace sed in `.deploy`; fixed yq path to `.spec.values.image.tag` and target file to `myapp.yaml`; update `needs:` on all deploy jobs; fix stale `CONFIG_REPO_PATH` comment |
+| `.gitlab-ci.yml` | Split `build` into `.build-base` + `build:dev/staging/prod`; yq replace sed in `.deploy`; fixed yq path to `.spec.values.image.tag` and target file to `myapp.yaml`; update `needs:` on all deploy jobs; fix stale `CONFIG_REPO_PATH` comment; fix Terraform cache key `${CI_ENVIRONMENT_NAME}` → `${ENV}` |
 | `infrastructure/sources/karpenter.yaml` | `apiVersion` `v1beta2` → `v1` (consistent with all other sources) |
 | `terraform/environments/dev/terraform.tfvars` | `config_repo_path` placeholder updated to `my-org/amsc-bluebook` |
 | `terraform/environments/staging/terraform.tfvars` | Same |
@@ -106,7 +122,7 @@
 | `terraform/environments/dev/variables.tf` | `config_repo_path` description updated to reference this repo |
 | `terraform/environments/staging/variables.tf` | Same |
 | `terraform/environments/prod/variables.tf` | Same |
-| `terraform/environments/dev/platform.tf` | Fix stale section 7 Loki comment; plus earlier changes |
+| `terraform/environments/dev/platform.tf` | Fix stale section 7 Loki comment; fix karpenter `irsa_oidc_provider_arn` → `oidc_provider_arn`; plus earlier changes |
 | `terraform/environments/staging/platform.tf` | Same |
 | `terraform/environments/prod/platform.tf` | Same |
 | `terraform/modules/eks/main.tf` | `deletion_window_in_days` 7→30; `lifecycle.prevent_destroy = true` on KMS key |
@@ -125,7 +141,7 @@
 | `terraform/environments/prod/platform.tf` | Same as dev |
 | `infrastructure/prod/patches/loki-s3.yaml` | New — Loki S3 SimpleScalable patch for prod |
 | `infrastructure/prod/kustomization.yaml` | Add `patches:` block referencing `loki-s3.yaml` |
-| `README.md` | Updated platform table, env differences table, CI pipeline reference, module reference, setup guide; fixed config repo relationship, added Route53 prerequisite, fixed Step 4 variables split by repo (this repo vs app project), fixed Step 4 variable list (added TF_VAR_* sensitive vars, added STAGING/PROD ECR registries), added Loki IRSA to Step 3 bullet list, fixed Step 5 example (v1beta2→v1), fixed day-to-day flow, fixed module table duplicate row; added CI repo split note, corrected yq path in Step 5 comment |
+| `README.md` | Updated platform table, env differences table, CI pipeline reference, module reference, setup guide; fixed config repo relationship, added Route53 prerequisite, fixed Step 4 variables split by repo, added Loki IRSA to Step 3 bullet list, fixed Step 5 example (v1beta2→v1), added Helm chart OCI prerequisite note to Step 5, fixed ESO description (no ExternalSecret configured — nodes use instance role for ECR), fixed day-to-day flow, fixed CI repo split note, corrected yq path |
 
 ---
 

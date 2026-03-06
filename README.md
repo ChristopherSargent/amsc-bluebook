@@ -57,7 +57,7 @@ Per AWS Account:
 - Each environment (dev/staging/prod) lives in a completely separate AWS account
 - GitLab CI authenticates to AWS via OIDC — no access keys, no secrets rotation
 - FluxCD runs inside each cluster and pulls from Git — no inbound cluster access required
-- External Secrets Operator refreshes ECR auth tokens automatically via IRSA
+- External Secrets Operator is pre-deployed with an IRSA role scoped to ECR — add ExternalSecret resources to manage Kubernetes Secrets from AWS Secrets Manager or ECR
 - Cilium enforces network policy at the kernel level via eBPF — no sidecar proxies required
 - Kong provides API gateway capabilities (rate limiting, auth plugins, L7 routing) in front of services
 
@@ -77,7 +77,7 @@ Per AWS Account:
 | kube-prometheus-stack | `monitoring` | Prometheus, Grafana, Alertmanager | No |
 | Loki + Promtail | `monitoring` | Log aggregation and shipping | Yes (IRSA) — S3 backend in prod |
 | Velero | `velero` | Cluster backup and restore to S3 | Yes (IRSA) |
-| External Secrets Operator | `external-secrets` | ECR token refresh | Yes (IRSA) |
+| External Secrets Operator | `external-secrets` | Kubernetes Secrets from AWS Secrets Manager / ECR (pre-deployed; add ExternalSecret resources to activate) | Yes (IRSA) |
 
 ---
 
@@ -369,6 +369,8 @@ spec:
       repository: <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/myapp/backend
       tag: "abc1234"   # deploy:dev bumps this via: yq -i ".spec.values.image.tag = ..."
 ```
+
+> **Helm chart prerequisite:** The HelmRepository above expects your Helm chart packaged as an OCI artifact at `oci://<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/charts/myapp`. This is separate from the Docker image push done by `build:dev`. Add a `helm package` + `helm push` step to your app's CI pipeline to publish the chart to ECR. Alternatively, point the HelmRepository at a public chart registry (e.g. Bitnami, Artifact Hub) and override only the `image.tag` in `values:` — the deploy job works the same either way.
 
 You also need a Kustomization in `clusters/<env>/` that tells Flux to reconcile the `apps/` directory:
 

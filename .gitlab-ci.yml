@@ -37,7 +37,7 @@ variables:
   image: hashicorp/terraform:1.7
   extends: .aws-auth
   cache:
-    key: terraform-${CI_ENVIRONMENT_NAME}
+    key: terraform-${ENV}
     paths:
       - ${TF_ROOT}/${ENV}/.terraform
 
