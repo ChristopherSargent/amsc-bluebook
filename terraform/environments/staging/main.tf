@@ -2,7 +2,6 @@
 #   - larger node sizes
 #   - single_nat_gateway = false (HA)
 #   - cluster_name = eks-staging
-# Copy dev/main.tf here and update the two values below.
 
 locals {
   tags = {

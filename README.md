@@ -269,6 +269,12 @@ This creates:
 
 Repeat for staging and prod.
 
+> **First-boot reconciliation:** On the first Flux sync after `terraform apply`, two components will fail briefly before self-healing:
+> - **Karpenter** — `EC2NodeClass` and `NodePool` resources are applied at the same time as the Karpenter HelmRelease. The CRDs they require are registered by the HelmRelease, so they fail with "no matches for kind" on the first pass and succeed on the next Flux retry (~10 minutes).
+> - **cert-manager** — The `ClusterIssuer` is applied alongside the cert-manager HelmRelease and fails similarly until the HelmRelease finishes installing the CRDs.
+>
+> Both are self-healing. No action is needed — watch `flux get kustomizations -A` and wait for all statuses to become `Ready`.
+
 ### Step 3b — Pin provider versions (run once per environment, commit the result)
 
 After the first `terraform init`, generate lock files so CI always resolves identical provider versions:

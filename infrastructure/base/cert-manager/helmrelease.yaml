@@ -24,3 +24,9 @@ spec:
         eks.amazonaws.com/role-arn: ${CERT_MANAGER_ROLE_ARN}
     securityContext:
       fsGroup: 1001
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi

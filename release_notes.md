@@ -2,6 +2,51 @@
 
 ---
 
+## cl4.004 — Resource limits, stale comment removal, and first-boot documentation
+
+### Bug Fixes
+
+- **Missing memory limits on cert-manager, external-dns, metrics-server, and Cilium HelmReleases**
+  (`infrastructure/base/cert-manager/helmrelease.yaml`,
+  `infrastructure/base/external-dns/helmrelease.yaml`,
+  `infrastructure/base/metrics-server/helmrelease.yaml`,
+  `infrastructure/base/cilium/helmrelease.yaml`)
+  These four HelmReleases had no memory limits (cert-manager, external-dns, metrics-server had
+  no `resources:` block at all; Cilium had requests but no limits). Without limits, a memory leak
+  or traffic spike in any of these pods can exhaust node memory and trigger evictions of
+  co-located workloads. Added `requests` and `limits` to the three missing components and
+  added `limits.memory: 512Mi` to Cilium alongside its existing requests.
+
+- **Stale development comment in `staging/main.tf`**
+  (`terraform/environments/staging/main.tf`)
+  The file header contained `# Copy dev/main.tf here and update the two values below.` — a
+  leftover editing artifact. The file is complete; no copying is needed. On a reference
+  implementation this reads as an instruction to the reader and was removed.
+
+### Documentation
+
+- **First-boot CRD timing not documented**
+  (`README.md`)
+  Karpenter's `EC2NodeClass` and `NodePool` and cert-manager's `ClusterIssuer` are applied in
+  the same Kustomization as their respective HelmReleases. On first boot the CRDs those resources
+  require don't exist yet, so Flux logs errors for ~10 minutes until the HelmReleases finish
+  installing the CRDs and the next reconciliation cycle succeeds. This is self-healing but
+  alarming if unexpected. Added a callout block to Step 3 explaining the behaviour and the
+  `flux get kustomizations -A` command to monitor it.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `infrastructure/base/cert-manager/helmrelease.yaml` | Add `resources.requests` (cpu: 50m, memory: 64Mi) and `resources.limits` (memory: 128Mi) |
+| `infrastructure/base/external-dns/helmrelease.yaml` | Add `resources.requests` (cpu: 10m, memory: 64Mi) and `resources.limits` (memory: 128Mi) |
+| `infrastructure/base/metrics-server/helmrelease.yaml` | Add `resources.requests` (cpu: 100m, memory: 64Mi) and `resources.limits` (memory: 128Mi) |
+| `infrastructure/base/cilium/helmrelease.yaml` | Add `resources.limits.memory: 512Mi` alongside existing requests |
+| `terraform/environments/staging/main.tf` | Remove stale `# Copy dev/main.tf here...` comment |
+| `README.md` | Add first-boot CRD timing callout to Step 3 |
+
+---
+
 ## cl4.004 — Documentation: repo structure and provider lock file guidance
 
 ### Documentation
