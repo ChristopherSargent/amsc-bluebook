@@ -2,6 +2,20 @@
 
 ---
 
+## cl4.004 — Third audit pass: documentation gap fixed
+
+### Documentation
+
+- **README repo structure missing `promtail.yaml` prod patch** (`README.md`)
+  The `infrastructure/prod/patches/promtail.yaml` file added in the previous session
+  (redirects Promtail push URL to `loki-gateway` for SimpleScalable mode) was not
+  reflected in the repository structure diagram. Updated to list both prod patch files.
+
+All chart versions, Terraform, Flux manifests, IRSA roles, and security configuration
+re-verified against live registries (March 2026). No functional issues found.
+
+---
+
 ## cl4.004 — Production deployment audit: three critical bug fixes
 
 ### Bug Fixes

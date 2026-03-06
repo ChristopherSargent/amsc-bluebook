@@ -121,7 +121,8 @@ Per AWS Account:
     └── prod/
         ├── kustomization.yaml      Flux reconciliation target for prod (base + patches)
         └── patches/
-            └── loki-s3.yaml        Overrides Loki to S3-backed SimpleScalable mode
+            ├── loki-s3.yaml        Overrides Loki to S3-backed SimpleScalable mode
+            └── promtail.yaml       Redirects Promtail push URL to loki-gateway (SimpleScalable)
 ```
 
 Each environment directory contains:
