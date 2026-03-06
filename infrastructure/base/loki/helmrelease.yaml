@@ -31,6 +31,3 @@ spec:
           memory: 256Mi
         limits:
           memory: 512Mi
-    # Promtail ships logs from all pods to Loki
-    promtail:
-      enabled: true

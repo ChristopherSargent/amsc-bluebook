@@ -2,6 +2,135 @@
 
 ---
 
+## cl4.004 — Version refresh, log collection fix, security hardening, and production readiness audit
+
+### Bug Fixes
+
+- **CI Terraform image version conflicted with `required_version` constraint**
+  (`.gitlab-ci.yml`)
+  The `.terraform` base job used `hashicorp/terraform:1.7`. After updating
+  `required_version` to `>= 1.9, < 2.0`, every CI job would immediately fail with
+  a version constraint error before running any Terraform code. Bumped the image
+  to `hashicorp/terraform:1.14` (current stable).
+
+- **EKS module default `cluster_version` not updated**
+  (`terraform/modules/eks/variables.tf`)
+  The three environment `variables.tf` files had their defaults updated to `"1.32"`,
+  but the module's own variable default remained `"1.30"`. Any caller omitting
+  `cluster_version` would silently get an end-of-standard-support cluster version.
+  Updated module default to `"1.32"`.
+
+- **Loki log collection silently not working in all environments**
+  (`infrastructure/base/loki/helmrelease.yaml`,
+  `infrastructure/prod/patches/loki-s3.yaml`,
+  `infrastructure/base/loki/kustomization.yaml`)
+  The base HelmRelease and prod patch both set `promtail.enabled: true`. This key
+  is valid in the deprecated `loki-stack` chart but is silently ignored in the
+  standalone `loki` chart 6.x deployed here. No logs from any pod were being
+  shipped to Loki in any environment. Fixed by:
+  1. Removing the dead `promtail.enabled` key from both files.
+  2. Adding a dedicated `promtail` HelmRelease
+     (`infrastructure/base/loki/promtail.yaml`, chart `6.17.*`) configured to
+     push to `http://loki.monitoring.svc.cluster.local:3100/loki/api/v1/push`.
+  3. Adding `promtail.yaml` to the loki base kustomization so all three environments
+     pick it up automatically.
+
+### Security
+
+- **Bootstrap Terraform state backend had no destroy protection**
+  (`terraform/bootstrap/main.tf`)
+  The S3 state bucket and DynamoDB lock table had no `lifecycle { prevent_destroy = true }`.
+  A `terraform destroy` in the bootstrap workspace would permanently delete the
+  state backend for all three environments, making all deployed infrastructure
+  unmanageable from Terraform without manual recovery. Added `prevent_destroy = true`
+  to both resources.
+
+### Version Updates
+
+All component versions updated to current stable as of March 2026. Major jumps
+that may require values review before deploying are marked ⚠️.
+
+| Component | Before | After | Notes |
+|---|---|---|---|
+| Kubernetes (all envs + module default) | `1.30` | `1.32` | EKS standard support |
+| `aws-load-balancer-controller` | `1.8.*` | `3.1.*` | ⚠️ Major chart version jump — review values |
+| `cert-manager` | `1.14.*` | `1.19.*` | `installCRDs` API changed (see below) |
+| `cilium` | `1.15.*` | `1.18.*` | |
+| `karpenter` | `1.0.*` | `1.9.*` | |
+| `kong ingress` | `0.12.*` | `0.22.*` | |
+| `kube-prometheus-stack` | `58.*` | `82.9.*` | ⚠️ Large jump — review UPGRADE.md |
+| `loki` | `6.*` | `6.53.*` | Minor pin added |
+| `metrics-server` | `3.12.*` | `3.13.*` | |
+| `velero` | `7.*` | `11.4.*` | ⚠️ Major jump — review plugin compatibility |
+| `external-dns` | `1.14.*` | `1.20.*` | |
+| `external-secrets` (all envs) | `0.9.20` | `2.0.1` | ⚠️ Major version — review 2.0 migration guide |
+| Terraform `required_version` | `>= 1.6` | `>= 1.9, < 2.0` | Upper bound added |
+| CI Terraform image | `1.7` | `1.14` | |
+
+- **`cert-manager` values: `installCRDs: true` → `crds.enabled: true`**
+  (`infrastructure/base/cert-manager/helmrelease.yaml`)
+  `installCRDs` was deprecated in cert-manager v1.15 and removed in v1.16+.
+  Updated to the current `crds.enabled: true` key.
+
+### Quality
+
+- **No Let's Encrypt staging issuer provisioned**
+  (`infrastructure/base/cert-manager/clusterissuer-staging.yaml`,
+  `infrastructure/base/cert-manager/kustomization.yaml`)
+  The only `ClusterIssuer` provisioned was `letsencrypt-prod`, pointing at the
+  production ACME endpoint. Running certificate issuance tests in dev or staging
+  against the prod endpoint consumes Let's Encrypt rate limit quota (50 certs per
+  registered domain per week). Added a `letsencrypt-staging` `ClusterIssuer` pointing
+  at the staging ACME endpoint (`acme-staging-v02.api.letsencrypt.org`). Staging certs
+  are not browser-trusted but confirm the DNS-01 flow is working before using a prod cert.
+
+### Documentation
+
+- **`flux` and `helm` CLIs missing from prerequisites** (`README.md`)
+  The first-boot section referenced `flux get kustomizations -A` but the flux CLI was
+  not listed as a prerequisite. `helm` is required for any HelmRelease debugging.
+  Both added to the prerequisites tool list.
+
+- **CI `myapp/backend` placeholder not flagged as required customization** (`README.md`)
+  The `build:*` jobs in `.gitlab-ci.yml` contain a hardcoded `myapp/backend` image name.
+  The pipeline will push to the wrong ECR repository until this is changed. Added an
+  explicit callout in the CI Pipeline Reference section.
+
+- **Loki chart migration document** (`update_repo.md`)
+  The Grafana Loki Helm chart migrates from `grafana/loki` to `grafana-community/helm-charts`
+  on March 16, 2026. `update_repo.md` documents the single required change
+  (`infrastructure/sources/grafana.yaml` URL) and how to verify Flux picks it up.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `.gitlab-ci.yml` | Terraform image `1.7` → `1.14` |
+| `terraform/modules/eks/variables.tf` | `cluster_version` default `1.30` → `1.32` |
+| `terraform/environments/*/variables.tf` | `cluster_version` default `1.30` → `1.32` |
+| `terraform/environments/*/providers.tf` | `required_version` `>= 1.6` → `>= 1.9, < 2.0` |
+| `terraform/bootstrap/main.tf` | `required_version` updated; `prevent_destroy = true` on S3 bucket and DynamoDB table |
+| `terraform/environments/*/main.tf` | `external-secrets` chart `0.9.20` → `2.0.1` |
+| `infrastructure/base/aws-load-balancer-controller/helmrelease.yaml` | Chart `1.8.*` → `3.1.*` |
+| `infrastructure/base/cert-manager/helmrelease.yaml` | Chart `1.14.*` → `1.19.*`; `installCRDs` → `crds.enabled` |
+| `infrastructure/base/cert-manager/clusterissuer-staging.yaml` | New — `letsencrypt-staging` ClusterIssuer |
+| `infrastructure/base/cert-manager/kustomization.yaml` | Added `clusterissuer-staging.yaml` |
+| `infrastructure/base/cilium/helmrelease.yaml` | Chart `1.15.*` → `1.18.*` |
+| `infrastructure/base/karpenter/helmrelease.yaml` | Chart `1.0.*` → `1.9.*` |
+| `infrastructure/base/kong/helmrelease.yaml` | Chart `0.12.*` → `0.22.*` |
+| `infrastructure/base/kube-prometheus-stack/helmrelease.yaml` | Chart `58.*` → `82.9.*` |
+| `infrastructure/base/loki/helmrelease.yaml` | Chart `6.*` → `6.53.*`; removed dead `promtail.enabled` |
+| `infrastructure/base/loki/promtail.yaml` | New — promtail HelmRelease `6.17.*` |
+| `infrastructure/base/loki/kustomization.yaml` | Added `promtail.yaml` |
+| `infrastructure/base/metrics-server/helmrelease.yaml` | Chart `3.12.*` → `3.13.*` |
+| `infrastructure/base/velero/helmrelease.yaml` | Chart `7.*` → `11.4.*` |
+| `infrastructure/base/external-dns/helmrelease.yaml` | Chart `1.14.*` → `1.20.*` |
+| `infrastructure/prod/patches/loki-s3.yaml` | Removed dead `promtail.enabled` |
+| `README.md` | Added `flux` and `helm` CLIs to prerequisites; CI placeholder callout; Terraform version updated |
+| `update_repo.md` | New — Loki chart repo migration instructions for March 16, 2026 |
+
+---
+
 ## cl4.004 — Resource limits, stale comment removal, and first-boot documentation
 
 ### Bug Fixes

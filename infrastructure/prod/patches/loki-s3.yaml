@@ -70,5 +70,3 @@ spec:
     singleBinary:
       replicas: 0
 
-    promtail:
-      enabled: true

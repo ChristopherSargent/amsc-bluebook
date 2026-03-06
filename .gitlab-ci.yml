@@ -34,7 +34,7 @@ variables:
 
 # ── Terraform base ────────────────────────────────────────────────────────────
 .terraform:
-  image: hashicorp/terraform:1.7
+  image: hashicorp/terraform:1.14
   extends: .aws-auth
   cache:
     key: terraform-${ENV}

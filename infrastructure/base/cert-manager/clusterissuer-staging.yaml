@@ -1,0 +1,17 @@
+# Let's Encrypt staging issuer — use this for dev/staging to avoid hitting
+# production rate limits during testing. Staging certs are not trusted by
+# browsers but are structurally valid for verifying the DNS-01 flow works.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-staging
+spec:
+  acme:
+    email: ${LETSENCRYPT_EMAIL}
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-staging-account-key
+    solvers:
+      - dns01:
+          route53:
+            region: ${AWS_REGION}

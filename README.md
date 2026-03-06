@@ -143,7 +143,9 @@ Each environment directory contains:
 
 - [Terraform](https://developer.hashicorp.com/terraform/install) >= 1.9
 - [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) v2
-- `kubectl` (for manual cluster inspection)
+- [flux CLI](https://fluxcd.io/flux/installation/#install-the-flux-cli) — required to monitor reconciliation and force resyncs
+- `kubectl` — for manual cluster inspection
+- `helm` — optional but needed for debugging HelmRelease failures (`helm list -A`, `helm status`)
 
 **AWS** (per target account):
 
@@ -541,6 +543,8 @@ The `.gitlab-ci.yml` pipeline has five stages:
 Each `build:<env>` job assumes the corresponding account's IAM role and pushes directly to that account's ECR registry — no cross-account ECR access required. `deploy:<env>` gates on `build:<env>` completing first.
 
 > **CI pipeline split:** The Terraform jobs (`tf:validate`, `tf:plan:*`, `tf:apply:*`) belong in **this repo's** `.gitlab-ci.yml` and are already configured. The `build:*` and `deploy:*` jobs are intended for your **application repo's** CI pipeline — copy the `.build-base` and `.deploy` templates (and the `.aws-auth` helper) into the app project's `.gitlab-ci.yml`, adjusting `docker build` context and `yq` path (`clusters/${DEPLOY_ENV}/apps/myapp.yaml`) as needed. Set all the variables listed below in the app repo's CI/CD settings.
+
+> **Required customization:** The `build:*` jobs in `.gitlab-ci.yml` contain `myapp/backend` as a placeholder image name. Replace every occurrence with your actual ECR repository name (e.g. `yourapp/api`) before the pipeline will push to the correct repository.
 
 **Required GitLab CI/CD variables** (see Step 4 for full setup instructions):
 
