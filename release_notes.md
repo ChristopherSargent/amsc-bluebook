@@ -2,6 +2,33 @@
 
 ---
 
+## cl4.004 — Documentation: repo structure and provider lock file guidance
+
+### Documentation
+
+- **Repo structure diagram omitted `infrastructure/dev/`, `infrastructure/staging/`, `infrastructure/prod/`**
+  (`README.md`)
+  The repository structure diagram showed only `infrastructure/sources/` and `infrastructure/base/`.
+  The three environment kustomization directories were missing despite being the actual Flux
+  reconciliation targets (each `clusters/<env>/infrastructure.yaml` points at `infrastructure/<env>`).
+  `infrastructure/prod/` additionally contains the Loki S3 patch critical to prod log durability.
+  Added all three directories to the diagram with descriptions, including `infrastructure/prod/patches/loki-s3.yaml`.
+
+- **Step 3b lacked the `terraform providers lock` command**
+  (`README.md`)
+  Step 3b said "commit the generated lock file" without showing how to generate it.
+  Added the `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64` invocation
+  for each environment directory, with a note to add `-platform=` flags for all OS/arch combinations
+  in use locally and in CI.
+
+### Updated Files
+
+| File | Change |
+|---|---|
+| `README.md` | Added `infrastructure/dev/`, `infrastructure/staging/`, `infrastructure/prod/patches/` to repo structure diagram; added `terraform providers lock` command to Step 3b |
+
+---
+
 ## cl4.004 — Security hardening, reliability, and CI correctness pass
 
 ### Bug Fixes

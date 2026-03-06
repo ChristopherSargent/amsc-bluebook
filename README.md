@@ -103,17 +103,25 @@ Per AWS Account:
 │   └── prod/infrastructure.yaml
 └── infrastructure/
     ├── sources/                    HelmRepository sources (one file per upstream)
-    └── base/                       HelmRelease base configs (10 components)
-        ├── cilium/
-        ├── aws-load-balancer-controller/
-        ├── kong/
-        ├── karpenter/
-        ├── metrics-server/
-        ├── cert-manager/
-        ├── external-dns/
-        ├── kube-prometheus-stack/
-        ├── loki/
-        └── velero/
+    ├── base/                       HelmRelease base configs (10 components)
+    │   ├── cilium/
+    │   ├── aws-load-balancer-controller/
+    │   ├── kong/
+    │   ├── karpenter/
+    │   ├── metrics-server/
+    │   ├── cert-manager/
+    │   ├── external-dns/
+    │   ├── kube-prometheus-stack/
+    │   ├── loki/
+    │   └── velero/
+    ├── dev/
+    │   └── kustomization.yaml      Flux reconciliation target for dev (base, filesystem Loki)
+    ├── staging/
+    │   └── kustomization.yaml      Flux reconciliation target for staging (base, filesystem Loki)
+    └── prod/
+        ├── kustomization.yaml      Flux reconciliation target for prod (base + patches)
+        └── patches/
+            └── loki-s3.yaml        Overrides Loki to S3-backed SimpleScalable mode
 ```
 
 Each environment directory contains:
@@ -263,7 +271,26 @@ Repeat for staging and prod.
 
 ### Step 3b — Pin provider versions (run once per environment, commit the result)
 
-After the first `terraform init`, commit the generated lock file so CI always resolves identical provider versions:
+After the first `terraform init`, generate lock files so CI always resolves identical provider versions:
+
+```bash
+cd terraform/environments/dev
+terraform providers lock \
+  -platform=linux_amd64 \
+  -platform=darwin_arm64
+
+cd ../staging
+terraform providers lock \
+  -platform=linux_amd64 \
+  -platform=darwin_arm64
+
+cd ../prod
+terraform providers lock \
+  -platform=linux_amd64 \
+  -platform=darwin_arm64
+```
+
+Add `-platform=` for every OS/arch combination your team uses locally and in CI. Then commit the results:
 
 ```bash
 git add terraform/environments/dev/.terraform.lock.hcl
@@ -273,7 +300,7 @@ git commit -m "chore: pin terraform provider versions"
 git push
 ```
 
-Without these files, `terraform init` on a fresh CI runner may pull different provider patch versions and produce non-reproducible plans.
+Without these files, `terraform init` on a fresh CI runner resolves provider versions from scratch and may pull different patch releases, producing non-reproducible plans.
 
 ### Step 4 — Copy outputs into GitLab CI variables
 
